@@ -13,7 +13,8 @@ gas_limit = "18446744073709551615"
 
 [rpc_endpoints]
 mainnet = "https://eth.merkle.io"
-holesky = "${ETH_RPC_URL_HOLESKY}"
+holesky = "https://ethereum-holesky-rpc.publicnode.com"
+sepolia = "https://sepolia.gateway.tenderly.co"
 
 [fmt]
 bracket_spacing = false

@@ -7,10 +7,12 @@ out/**/
 !out/DefaultOperatorRewards.sol/
 
 # Ignores development broadcast logs
-!/broadcast
-/broadcast/*/31337/
-/broadcast/*/11155111/
-/broadcast/**/dry-run/
+# !/broadcast
+# /broadcast/*/31337/
+# /broadcast/*/11155111/
+# /broadcast/**/dry-run/
+
+broadcast/
 
 # Docs
 docs/
