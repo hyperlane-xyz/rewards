@@ -48,7 +48,7 @@ contract DistributeRewardsStaging is Test {
         // 1. distribute rewards
         uint48 timestamp = uint48(block.timestamp - 1); // Distributions must be for timestamp in the past
         rewards.distributeRewards(
-            deployer,
+            _getNetwork(),
             address(hyper), // HYPER
             0.001 ether,
             abi.encode(timestamp, 0, bytes(""), bytes(""))
