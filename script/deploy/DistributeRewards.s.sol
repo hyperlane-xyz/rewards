@@ -9,28 +9,36 @@ import {NetworkMiddlewareService} from "lib/core/src/contracts/service/NetworkMi
 import {IVaultTokenized} from "lib/core/src/interfaces/vault/IVaultTokenized.sol";
 import {console2} from "forge-std/console2.sol";
 
-contract DistributeRewardsStaging is Script {
+contract DistributeRewardsSepolia is Script {
     function _start() internal returns (address) {
         address deployer = vm.rememberKey(vm.envUint("PRIVATE_KEY"));
-        vm.startBroadcast(deployer);
         console2.log("deployer", deployer);
+        vm.startBroadcast(deployer);
         return deployer;
     }
 
-    function _getNetwork() internal returns (address) {
+    function _getNetwork() internal virtual returns (address) {
         // This is the network address, which is also just the deployer address
         return 0xfaD1C94469700833717Fa8a3017278BC1cA8031C;
     }
 
+    function _getNetworkRegistry() internal virtual returns (address) {
+        return 0x7d03b7343BF8d5cEC7C0C27ecE084a20113D15C9;
+    }
+
     function _setupNetwork() internal {
         // Register network using networkregistry at 0x7d03b7343BF8d5cEC7C0C27ecE084a20113D15C9
-        NetworkRegistry networkRegistry = NetworkRegistry(0x7d03b7343BF8d5cEC7C0C27ecE084a20113D15C9);
+        NetworkRegistry networkRegistry = NetworkRegistry(_getNetworkRegistry());
         networkRegistry.registerNetwork();
+    }
+
+    function _getNetworkMiddlewareService() internal virtual  returns (address) {
+        return 0x62a1ddfD86b4c1636759d9286D3A0EC722D086e3;
     }
 
     function _registerMiddleware() internal {
         // Register middleware using NetworkMiddlewareService at 0x62a1ddfD86b4c1636759d9286D3A0EC722D086e3
-        NetworkMiddlewareService networkMiddlewareService = NetworkMiddlewareService(0x62a1ddfD86b4c1636759d9286D3A0EC722D086e3);
+        NetworkMiddlewareService networkMiddlewareService = NetworkMiddlewareService(_getNetworkMiddlewareService());
         // The middleware is the network address, which is also just the deployer address. We're only doing this because we're just testing
         // On mainnet, use a contract the middleware
         networkMiddlewareService.setMiddleware(_getNetwork());
@@ -38,13 +46,13 @@ contract DistributeRewardsStaging is Script {
 
    
     function _fundDepositor(address depositor) internal {
-        ERC20 hyper = ERC20(0x1e111DF35aD11B3d18e5b5E9A7fd4Ed8dc841011);
-        hyper.transfer(depositor, 0.001 ether);
+        ERC20 hyper = ERC20(_getToken());
+        hyper.transfer(depositor, 100 ether);
     }
 
     function fundDepositor(address depositor) public {
         _start();
-        depositor.call{value:0.01 ether}("");
+        // depositor.call{value:0.01 ether}("");
         _fundDepositor(depositor);
     }
 
@@ -62,9 +70,17 @@ contract DistributeRewardsStaging is Script {
         _deposit(depositor);
     }
 
+    function _getRewards() internal virtual returns (address) {
+        return 0xe0bf535F776d900D499407623C03bACe81334127;
+    }
+
+    function _getToken() internal virtual returns (address) {
+        return 0x1e111DF35aD11B3d18e5b5E9A7fd4Ed8dc841011;
+    }
+
     function _distributeRewards() internal {
-        IDefaultStakerRewards rewards = IDefaultStakerRewards(0xe0bf535F776d900D499407623C03bACe81334127);
-        ERC20 hyper = ERC20(0x1e111DF35aD11B3d18e5b5E9A7fd4Ed8dc841011);
+        IDefaultStakerRewards rewards = IDefaultStakerRewards(_getRewards());
+        ERC20 hyper = ERC20(_getToken());
         hyper.approve(address(rewards), type(uint256).max);
 
         // 1. distribute rewards
@@ -98,7 +114,7 @@ contract DistributeRewardsStaging is Script {
         _start();
         IDefaultStakerRewards rewards = IDefaultStakerRewards(0xe0bf535F776d900D499407623C03bACe81334127);
         // Log some info about distributions
-        address token = 0x1e111DF35aD11B3d18e5b5E9A7fd4Ed8dc841011;
+        address token = _getToken();
         address network = _getNetwork();
        (uint amount, uint48 timestamp1) = rewards.rewards(token,network,0);
         uint256 lastUnclaimedReward_ = rewards.lastUnclaimedReward(depositor, token, network); 
@@ -107,7 +123,7 @@ contract DistributeRewardsStaging is Script {
         console2.log("timestamp: %s", timestamp1);
         console2.log("lastUnclaimedReward_: %s", lastUnclaimedReward_);
 
-     ERC20 hyper = ERC20(0x1e111DF35aD11B3d18e5b5E9A7fd4Ed8dc841011);
+     ERC20 hyper = ERC20(_getToken());
         console2.log("balance of depositor before: %s", hyper.balanceOf(depositor));
 
         // Claim rewards
@@ -119,5 +135,26 @@ contract DistributeRewardsStaging is Script {
         console2.log("balance of depositor after: %s", hyper.balanceOf(depositor));
 
 
+    }
+}
+
+contract DistributeRewardsMainnet is DistributeRewardsSepolia {
+    function _getNetwork() internal override returns (address) {
+        return 0xa7ECcdb9Be08178f896c26b7BbD8C3D4E844d9Ba;
+    }
+
+    function _getRewards() internal override returns (address) {
+        return 0xBf8373D56c43BEaAeFd33ed6d5ea41Ba0C13e5a8;
+    }
+
+    function _getToken() internal override returns (address) {
+        return 0xC10c27afcb915439C27cAe54F5F46Da48cd71190;
+    }
+    function _getNetworkRegistry() internal override returns (address) {
+        return 0xC773b1011461e7314CF05f97d95aa8e92C1Fd8aA;
+    }
+
+    function _getNetworkMiddlewareService() internal override returns (address) {
+        return 0xD7dC9B366c027743D90761F71858BCa83C6899Ad;
     }
 }
