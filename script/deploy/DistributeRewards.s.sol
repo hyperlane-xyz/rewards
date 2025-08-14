@@ -77,6 +77,9 @@ contract DistributeRewardsSepolia is Script {
     function _getToken() internal virtual returns (address) {
         return 0x1e111DF35aD11B3d18e5b5E9A7fd4Ed8dc841011;
     }
+    function _getRewardsAmount() internal virtual returns (uint256) {
+        return 0.001 ether;
+    }
 
     function _distributeRewards() internal {
         IDefaultStakerRewards rewards = IDefaultStakerRewards(_getRewards());
@@ -88,7 +91,7 @@ contract DistributeRewardsSepolia is Script {
         rewards.distributeRewards(
             _getNetwork(),
             address(hyper), // HYPER
-            0.001 ether,
+            _getRewardsAmount(),
             abi.encode(timestamp, 0, bytes(""), bytes(""))
         );
  
@@ -129,7 +132,7 @@ contract DistributeRewardsSepolia is Script {
         // Claim rewards
         rewards.claimRewards(
             depositor,
-           0x1e111DF35aD11B3d18e5b5E9A7fd4Ed8dc841011, // HYPER
+           _getToken(), // HYPER
             abi.encode(network, type(uint256).max, bytes(""))
         );
         console2.log("balance of depositor after: %s", hyper.balanceOf(depositor));
@@ -156,5 +159,9 @@ contract DistributeRewardsMainnet is DistributeRewardsSepolia {
 
     function _getNetworkMiddlewareService() internal override returns (address) {
         return 0xD7dC9B366c027743D90761F71858BCa83C6899Ad;
+    }
+
+    function _getRewardsAmount() internal override returns (uint256) {
+        return 10 ether;
     }
 }
