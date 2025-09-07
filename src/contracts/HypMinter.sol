@@ -3,22 +3,9 @@ pragma solidity ^0.8.25;
 
 import {AccessManagedUpgradeable} from "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol";
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
-import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 
 import {IDefaultStakerRewards} from "../interfaces/defaultStakerRewards/IDefaultStakerRewards.sol";
-
-/**
- * @title IERC20Mintable
- * @notice Extended ERC20 interface that includes minting functionality
- */
-interface IERC20Mintable is IERC20 {
-    /**
-     * @notice Mints new tokens to a specified address
-     * @param to The address to mint tokens to
-     * @param amount The amount of tokens to mint
-     */
-    function mint(address to, uint256 amount) external;
-}
+import {IERC20Mintable} from "../interfaces/IERC20Mintable.sol";
 
 /**
  * @title HypMinter
@@ -26,15 +13,31 @@ interface IERC20Mintable is IERC20 {
  * @dev Implements a 30-day epoch system for token distribution with configurable operator rewards
  */
 contract HypMinter is AccessManagedUpgradeable {
+    constructor() {
+        _disableInitializers();
+    }
+
     /**
      * @notice Initializes the HypMinter contract
-     * @param firstTimestamp The initial timestamp for the first minting epoch
+     * @param _firstMintTimestamp The initial timestamp for the first minting epoch
      * @param _accessManager The access manager contract for role-based permissions
      * @dev Sets up the contract with initial timestamp and approves HYPER tokens for rewards distribution
      */
-    function initialize(uint256 firstTimestamp, AccessManager _accessManager) external initializer {
-        lastMintTimestamp = firstTimestamp;
+    function initialize(
+        uint256 _firstMintTimestamp,
+        uint256 _mintAllowedTimestamp,
+        AccessManager _accessManager
+    ) external initializer {
         __AccessManaged_init(address(_accessManager));
+
+        // Minting timestamps
+        lastMintTimestamp = _firstMintTimestamp;
+        mintAllowedTimestamp = _mintAllowedTimestamp;
+        
+        // Operator rewards
+        operatorRewardsManager = 0x2522d3797411Aff1d600f647F624713D53b6AA11;
+        operatorBps = 1000;
+        // Approve HYPER tokens for rewards distribution
         HYPER.approve(address(REWARDS), type(uint256).max);
     }
 
@@ -43,12 +46,13 @@ contract HypMinter is AccessManagedUpgradeable {
      * @dev Used to enforce 30-day epochs between minting operations
      */
     uint256 public lastMintTimestamp;
+    uint256 public mintAllowedTimestamp;
 
     /**
      * @notice Total amount of HYPER tokens minted per epoch
      * @dev Fixed at 666,667 HYPER tokens per minting cycle
      */
-    uint256 public constant MINT_AMOUNT = 666_667 ether;
+    uint256 public constant MINT_AMOUNT = 666_667 * (10 ** 18);
 
     /**
      * @notice The HYPER token contract with minting capabilities
@@ -74,8 +78,7 @@ contract HypMinter is AccessManagedUpgradeable {
      * @dev Mints the full MINT_AMOUNT and splits it between stakers and operators based on operatorBps
      */
     function mintAndDistribute() external {
-        // 2025-10-17 23:14:47 GMT
-        require(block.timestamp >= 1_760_742_887, "Not started");
+        require(block.timestamp >= mintAllowedTimestamp, "HypMinter: Minting not started");
 
         HYPER.mint(address(this), MINT_AMOUNT);
 
@@ -100,7 +103,7 @@ contract HypMinter is AccessManagedUpgradeable {
             network: SYMBIOTIC_NETWORK,
             token: address(HYPER),
             amount: getStakingMintAmount(),
-            data: abi.encode(newTimestamp, 0, bytes(""), bytes(""))
+            data: abi.encode(newTimestamp, type(uint256).max, bytes(""), bytes(""))
         });
     }
 
@@ -124,7 +127,7 @@ contract HypMinter is AccessManagedUpgradeable {
      * @notice Basis points allocated to operator rewards
      * @dev Default is 1,000 basis points (10%). Can be modified by authorized accounts
      */
-    uint256 public operatorBps = 1000;
+    uint256 public operatorBps;
 
     /**
      * @notice Sets the percentage of rewards allocated to operators
@@ -134,7 +137,7 @@ contract HypMinter is AccessManagedUpgradeable {
     function setOperatorRewardsBps(
         uint256 bps
     ) external restricted {
-        require(bps <= MAX_BPS, "Invalid BPS");
+        require(bps <= MAX_BPS, "HypMinter: Invalid BPS");
         operatorBps = bps;
     }
 
@@ -151,7 +154,7 @@ contract HypMinter is AccessManagedUpgradeable {
      * @notice Address that receives operator rewards
      * @dev Should be the Foundation multisig address
      */
-    address public operatorRewardsManager = 0x2522d3797411Aff1d600f647F624713D53b6AA11;
+    address public operatorRewardsManager;
 
     /**
      * @notice Distributes operator rewards by transferring tokens directly

@@ -2,39 +2,28 @@
 pragma solidity 0.8.25;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
+
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-import {HypMinter} from "../src/contracts/HypMinter.sol";
+import {HypMinter, IERC20Mintable} from "../src/contracts/HypMinter.sol";
 import {IDefaultStakerRewards} from "../src/interfaces/defaultStakerRewards/IDefaultStakerRewards.sol";
 import {IStakerRewards} from "../src/interfaces/stakerRewards/IStakerRewards.sol";
 import {NetworkMiddlewareService} from "../lib/core/src/contracts/service/NetworkMiddlewareService.sol";
-
-interface IERC20Mintable is IERC20 {
-    function mint(address to, uint256 amount) external;
-    function hasRole(bytes32 role, address account) external view returns (bool);
-    function MINTER_ROLE() external view returns (bytes32);
-}
-
-interface IAccessManager {
-    function grantRole(bytes32 role, address account, uint32 executionDelay) external;
-    function hasRole(bytes32 role, address account) external view returns (bool, uint32);
-}
+import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 contract HypMinterTest is Test {
     HypMinter hypMinter;
 
-    // Mainnet addresses from the contract
-    IERC20Mintable constant HYPER = IERC20Mintable(0x93A2Db22B7c736B341C32Ff666307F4a9ED910F5);
-    IDefaultStakerRewards constant REWARDS = IDefaultStakerRewards(0x84852EB9acbE1869372f83ED853B185F6c2848Dc);
-    address constant SYMBIOTIC_NETWORK = 0x59cf937Ea9FA9D7398223E3aA33d92F7f5f986A2;
-    address constant OPERATOR_REWARDS_MANAGER = 0x2522d3797411Aff1d600f647F624713D53b6AA11;
+    // Reward contract addresses
+    IERC20Mintable HYPER;
+    IDefaultStakerRewards REWARDS;
+    address SYMBIOTIC_NETWORK;
 
     // Constants from contract
-    uint256 constant MINT_AMOUNT = 666_667 ether;
-    uint256 constant MAX_BPS = 10_000;
-    uint256 constant OPERATOR_BPS = 1000; // 10%
+    uint256 MINT_AMOUNT;
+    uint256 MAX_BPS;
+    uint256 OPERATOR_BPS;
 
     // Admin addresses
     AccessManager accessManager = AccessManager(0x3D079E977d644c914a344Dcb5Ba54dB243Cc4863);
@@ -53,18 +42,38 @@ contract HypMinterTest is Test {
         vm.createSelectFork("mainnet", FORK_BLOCK_NUMBER);
 
         // Deploy the contract
-        // TOOD: Deploy as a proxy
-        hypMinter = new HypMinter();
-
         // Initialize with a timestamp in the past for testing
         uint256 firstTimestamp = block.timestamp - 31 days;
-        hypMinter.initialize(firstTimestamp, accessManager);
+        // 2025-10-17 23:14:47 GMT
+        uint256 mintAllowedTimestamp = 1_760_742_887;
 
+        // Read constants from implementation contract
+        hypMinter = new HypMinter();
+        HYPER = hypMinter.HYPER();
+        REWARDS = hypMinter.REWARDS();
+        SYMBIOTIC_NETWORK = hypMinter.SYMBIOTIC_NETWORK();
+        MINT_AMOUNT = hypMinter.MINT_AMOUNT();
+        MAX_BPS = hypMinter.MAX_BPS();
+        
+
+
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
+            address(hypMinter),
+            address(this),
+            abi.encodeCall(
+                HypMinter.initialize,
+                (firstTimestamp, mintAllowedTimestamp, accessManager)
+            )
+        );
+        // Set hypMinter to the proxy
+        hypMinter = HypMinter(address(proxy));
+        OPERATOR_BPS = hypMinter.operatorBps();
+        
+     
         // Label addresses for better test output
         vm.label(address(HYPER), "HYPER");
         vm.label(address(REWARDS), "REWARDS");
         vm.label(SYMBIOTIC_NETWORK, "SYMBIOTIC_NETWORK");
-        vm.label(OPERATOR_REWARDS_MANAGER, "OPERATOR_REWARDS_MANAGER");
         vm.label(address(hypMinter), "HypMinter");
         vm.label(address(accessManager), "accessManager");
         vm.label(multisigB, "multisigB");
@@ -76,7 +85,7 @@ contract HypMinterTest is Test {
         networkMiddlewareService.setMiddleware(address(hypMinter));
 
         // Fast forward to after the start time (2025-10-17 23:14:47 GMT)
-        vm.warp(1_760_742_887 + 1);
+        vm.warp(hypMinter.mintAllowedTimestamp() + 1);
 
         // Give the AccessManager the `MINTER_ROLE` on HYPER contract
         // 1. Schedule a grantRole operation via the AccessManager
@@ -146,21 +155,12 @@ contract HypMinterTest is Test {
         assertEq(operatorAmount + stakingAmount, MINT_AMOUNT);
     }
 
-    function test_constants() public {
-        assertEq(address(hypMinter.HYPER()), address(HYPER));
-        assertEq(address(hypMinter.REWARDS()), address(REWARDS));
-        assertEq(hypMinter.SYMBIOTIC_NETWORK(), SYMBIOTIC_NETWORK);
-        assertEq(hypMinter.MINT_AMOUNT(), MINT_AMOUNT);
-        assertEq(hypMinter.MAX_BPS(), MAX_BPS);
-    }
-
     // ========== Additional Simple Tests ==========
 
     function test_mintAndDistribute_RevertsBeforeStartTime() public {
-        // Test before the hardcoded start time (2025-10-17 23:14:47 GMT)
-        vm.warp(1_760_742_887 - 1);
+        vm.warp(hypMinter.mintAllowedTimestamp() - 1);
 
-        vm.expectRevert("Not started");
+        vm.expectRevert("HypMinter: Minting not started");
         hypMinter.mintAndDistribute();
     }
 
@@ -238,7 +238,7 @@ contract HypMinterTest is Test {
     function test_initialization_CannotReinitialize() public {
         // Try to initialize again - should revert
         vm.expectRevert();
-        hypMinter.initialize(block.timestamp, accessManager);
+        hypMinter.initialize(block.timestamp, block.timestamp + 30 days, accessManager);
     }
 
     function test_hyper_HasCorrectApproval() public {
