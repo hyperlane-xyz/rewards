@@ -54,22 +54,16 @@ contract HypMinterTest is Test {
         SYMBIOTIC_NETWORK = hypMinter.SYMBIOTIC_NETWORK();
         MINT_AMOUNT = hypMinter.MINT_AMOUNT();
         MAX_BPS = hypMinter.MAX_BPS();
-        
-
 
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
             address(hypMinter),
             address(this),
-            abi.encodeCall(
-                HypMinter.initialize,
-                (firstTimestamp, mintAllowedTimestamp, accessManager)
-            )
+            abi.encodeCall(HypMinter.initialize, (firstTimestamp, mintAllowedTimestamp, accessManager))
         );
         // Set hypMinter to the proxy
         hypMinter = HypMinter(address(proxy));
         OPERATOR_BPS = hypMinter.operatorBps();
-        
-     
+
         // Label addresses for better test output
         vm.label(address(HYPER), "HYPER");
         vm.label(address(REWARDS), "REWARDS");

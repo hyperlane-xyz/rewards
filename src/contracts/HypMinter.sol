@@ -33,7 +33,7 @@ contract HypMinter is AccessManagedUpgradeable {
         // Minting timestamps
         lastMintTimestamp = _firstMintTimestamp;
         mintAllowedTimestamp = _mintAllowedTimestamp;
-        
+
         // Operator rewards
         operatorRewardsManager = 0x2522d3797411Aff1d600f647F624713D53b6AA11;
         operatorBps = 1000;
