@@ -15,6 +15,12 @@ import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transpa
 contract HypMinterTest is Test {
     HypMinter hypMinter;
 
+    // Events from HypMinter contract
+    event Mint();
+    event Distribution(uint256 operatorRewardsBps);
+    event OperatorBpsSet(uint256 bps);
+    event OperatorRewardsManagerSet(address manager);
+
     // Reward contract addresses
     IERC20Mintable HYPER;
     IDefaultStakerRewards REWARDS;
@@ -93,6 +99,14 @@ contract HypMinterTest is Test {
         accessManager.execute(address(HYPER), data);
 
         uint256 initialBalance = HYPER.balanceOf(address(REWARDS));
+
+        // Expect Mint event to be emitted
+        vm.expectEmit(true, true, true, true);
+        emit HypMinter.Mint();
+        // Expect Distribution event to be emitted with current operator bps
+        vm.expectEmit(true, true, true, true);
+        emit HypMinter.Distribution(OPERATOR_BPS);
+
         hypMinter.mintAndDistribute();
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount());
     }
@@ -124,6 +138,10 @@ contract HypMinterTest is Test {
     function test_setOperatorRewardsBps() public {
         uint256 newBps = 1500; // 15%
         vm.prank(accessManagerAdmin);
+
+        // Expect OperatorBpsSet event to be emitted
+        vm.expectEmit(true, true, true, true);
+        emit HypMinter.OperatorBpsSet(newBps);
         hypMinter.setOperatorRewardsBps(newBps);
 
         assertEq(hypMinter.operatorBps(), newBps);
@@ -133,6 +151,9 @@ contract HypMinterTest is Test {
         address newManager = makeAddr("newManager");
 
         vm.prank(accessManagerAdmin);
+        // Expect OperatorRewardsManagerSet event to be emitted
+        vm.expectEmit(true, true, true, true);
+        emit HypMinter.OperatorRewardsManagerSet(newManager);
         hypMinter.setOperatorRewardsManager(newManager);
 
         assertEq(hypMinter.operatorRewardsManager(), newManager);

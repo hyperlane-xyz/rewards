@@ -13,39 +13,13 @@ import {IERC20Mintable} from "../interfaces/IERC20Mintable.sol";
  * @dev Implements a 30-day epoch system for token distribution with configurable operator rewards
  */
 contract HypMinter is AccessManagedUpgradeable {
-    constructor() {
-        _disableInitializers();
-    }
-
-    /**
-     * @notice Initializes the HypMinter contract
-     * @param _firstMintTimestamp The initial timestamp for the first minting epoch
-     * @param _accessManager The access manager contract for role-based permissions
-     * @dev Sets up the contract with initial timestamp and approves HYPER tokens for rewards distribution
-     */
-    function initialize(
-        uint256 _firstMintTimestamp,
-        uint256 _mintAllowedTimestamp,
-        AccessManager _accessManager
-    ) external initializer {
-        __AccessManaged_init(address(_accessManager));
-
-        // Minting timestamps
-        lastMintTimestamp = _firstMintTimestamp;
-        mintAllowedTimestamp = _mintAllowedTimestamp;
-
-        // Operator rewards
-        operatorRewardsManager = 0x2522d3797411Aff1d600f647F624713D53b6AA11;
-        operatorBps = 1000;
-        // Approve HYPER tokens for rewards distribution
-        HYPER.approve(address(REWARDS), type(uint256).max);
-    }
-
     /**
      * @notice Timestamp of the last minting operation
      * @dev Used to enforce 30-day epochs between minting operations
      */
     uint256 public lastMintTimestamp;
+
+    /// @notice Timestamp when minting is first allowed to begin
     uint256 public mintAllowedTimestamp;
 
     /**
@@ -54,10 +28,7 @@ contract HypMinter is AccessManagedUpgradeable {
      */
     uint256 public constant MINT_AMOUNT = 666_667 * (10 ** 18);
 
-    /**
-     * @notice The HYPER token contract with minting capabilities
-     * @dev Mainnet address of the HYPER ERC20 token
-     */
+    /// @notice The HYPER token contract
     IERC20Mintable public constant HYPER = IERC20Mintable(0x93A2Db22B7c736B341C32Ff666307F4a9ED910F5);
 
     /**
@@ -73,17 +44,77 @@ contract HypMinter is AccessManagedUpgradeable {
     address public constant SYMBIOTIC_NETWORK = 0x59cf937Ea9FA9D7398223E3aA33d92F7f5f986A2;
 
     /**
+     * @notice Address that receives operator rewards
+     * @dev Should be the Foundation multisig address
+     */
+    address public operatorRewardsManager;
+    /**
+     * @notice Maximum basis points value (100%)
+     * @dev Used for percentage calculations, where 10,000 = 100%
+     */
+    uint256 public constant MAX_BPS = 10_000;
+
+    /**
+     * @notice Basis points allocated to operator rewards
+     * @dev Default is 1,000 basis points (10%). Can be modified by authorized accounts
+     */
+    uint256 public operatorBps;
+
+    event Mint();
+    event Distribution(uint256 operatorRewardsBps);
+    event OperatorBpsSet(uint256 bps);
+    event OperatorRewardsManagerSet(address manager);
+
+    /**
+     * @notice Constructor that disables initializers for the implementation contract
+     * @dev Prevents the implementation contract from being initialized directly
+     */
+    constructor() {
+        _disableInitializers();
+    }
+
+    /**
+     * @notice Initializes the HypMinter contract
+     * @param _firstMintTimestamp The initial timestamp for the first minting epoch
+     * @param _mintAllowedTimestamp The timestamp when minting is first allowed to begin
+     * @param _accessManager The access manager contract for role-based permissions
+     * @dev Sets up the contract with initial timestamps, default operator settings, and approves HYPER tokens for rewards distribution
+     */
+    function initialize(
+        uint256 _firstMintTimestamp,
+        uint256 _mintAllowedTimestamp,
+        AccessManager _accessManager
+    ) external initializer {
+        __AccessManaged_init(address(_accessManager));
+
+        // Set minting timestamps
+        lastMintTimestamp = _firstMintTimestamp;
+        mintAllowedTimestamp = _mintAllowedTimestamp;
+
+        // Initialize operator rewards settings with default values
+        operatorRewardsManager = 0x2522d3797411Aff1d600f647F624713D53b6AA11;
+        operatorBps = 1000;
+
+        // Approve maximum HYPER tokens for rewards distribution to avoid future approval calls
+        HYPER.approve(address(REWARDS), type(uint256).max);
+    }
+
+    /**
      * @notice Mints HYPER tokens and distributes them to stakers and operators
-     * @dev Can only be called after the start time (2025-10-17 23:14:47 GMT) and respects 30-day epochs
+     * @dev Can only be called after mintAllowedTimestamp and respects 30-day epochs
      * @dev Mints the full MINT_AMOUNT and splits it between stakers and operators based on operatorBps
      */
     function mintAndDistribute() external {
         require(block.timestamp >= mintAllowedTimestamp, "HypMinter: Minting not started");
 
+        // Mint the full amount to this contract
         HYPER.mint(address(this), MINT_AMOUNT);
+        emit Mint();
 
+        // Distribute rewards to both stakers and operators
         _distributeStakingRewards();
         _distributeOperatorRewards();
+        emit Distribution(operatorBps);
     }
 
     /**
@@ -92,13 +123,14 @@ contract HypMinter is AccessManagedUpgradeable {
      * @dev Distributes tokens to the REWARDS contract for the SYMBIOTIC_NETWORK
      */
     function _distributeStakingRewards() internal {
-        // Fixed 30 day epochs
+        // Calculate next epoch timestamp (30 days after last mint)
         uint256 newTimestamp = lastMintTimestamp + 30 days;
-        require(block.timestamp >= newTimestamp);
+        require(block.timestamp >= newTimestamp, "HypMinter: Epoch not ready");
+
+        // Update the last mint timestamp for next epoch calculation
         lastMintTimestamp = newTimestamp;
 
-        // Only distribute staking rewards portion of mint
-        /// @dev This reverts if not in the past, but we did a require above anyway
+        // Distribute only the staking portion of minted tokens to the rewards contract
         REWARDS.distributeRewards({
             network: SYMBIOTIC_NETWORK,
             token: address(HYPER),
@@ -118,27 +150,11 @@ contract HypMinter is AccessManagedUpgradeable {
     }
 
     /**
-     * @notice Maximum basis points value (100%)
-     * @dev Used for percentage calculations, where 10,000 = 100%
+     * @notice Distributes operator rewards by transferring tokens directly
+     * @dev Transfers the operator portion of minted tokens to the operatorRewardsManager
      */
-    uint256 public constant MAX_BPS = 10_000;
-
-    /**
-     * @notice Basis points allocated to operator rewards
-     * @dev Default is 1,000 basis points (10%). Can be modified by authorized accounts
-     */
-    uint256 public operatorBps;
-
-    /**
-     * @notice Sets the percentage of rewards allocated to operators
-     * @param bps The new operator rewards percentage in basis points (e.g., 1000 = 10%)
-     * @dev Can only be called by authorized accounts (AW Multisig) with 30-day delay
-     */
-    function setOperatorRewardsBps(
-        uint256 bps
-    ) external restricted {
-        require(bps <= MAX_BPS, "HypMinter: Invalid BPS");
-        operatorBps = bps;
+    function _distributeOperatorRewards() internal {
+        HYPER.transfer(operatorRewardsManager, getOperatorMintAmount());
     }
 
     /**
@@ -151,27 +167,30 @@ contract HypMinter is AccessManagedUpgradeable {
     }
 
     /**
-     * @notice Address that receives operator rewards
-     * @dev Should be the Foundation multisig address
+     * @notice Sets the percentage of rewards allocated to operators
+     * @param bps The new operator rewards percentage in basis points (e.g., 1000 = 10%)
+     * @dev Can only be called by authorized accounts (AW Multisig) with 30-day delay
+     * @dev Must be between 0 and MAX_BPS (10,000) inclusive
      */
-    address public operatorRewardsManager;
-
-    /**
-     * @notice Distributes operator rewards by transferring tokens directly
-     * @dev Transfers the operator portion of minted tokens to the operatorRewardsManager
-     */
-    function _distributeOperatorRewards() internal {
-        HYPER.transfer(operatorRewardsManager, getOperatorMintAmount());
+    function setOperatorRewardsBps(
+        uint256 bps
+    ) external restricted {
+        require(bps <= MAX_BPS, "HypMinter: Invalid BPS");
+        operatorBps = bps;
+        emit OperatorBpsSet(bps);
     }
 
     /**
      * @notice Updates the address that receives operator rewards
      * @param _manager The new operator rewards manager address
      * @dev Can only be called by authorized accounts (AW Multisig) with 30-day delay
+     * @dev The new manager address will receive operator rewards from subsequent mints
      */
     function setOperatorRewardsManager(
         address _manager
     ) external restricted {
+        require(_manager != address(0), "HypMinter: Invalid manager address");
         operatorRewardsManager = _manager;
+        emit OperatorRewardsManagerSet(_manager);
     }
 }
