@@ -100,6 +100,7 @@ contract HypMinter is AccessManagedUpgradeable {
 
         // Set minting timestamps
         lastRewardTimestamp = _firstMintTimestamp;
+        rewardDistributions[_firstMintTimestamp].minted = true;
         mintAllowedTimestamp = _mintAllowedTimestamp;
         distributionDelay = 7 days;
 
