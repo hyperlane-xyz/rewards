@@ -40,6 +40,8 @@ contract HypMinterTest is Test {
     NetworkMiddlewareService networkMiddlewareService =
         NetworkMiddlewareService(0xD7dC9B366c027743D90761F71858BCa83C6899Ad);
 
+    uint256 firstTimestamp;
+    uint256 distributionDelay;
     // Fork block number - using a recent block
     uint256 constant FORK_BLOCK_NUMBER = 23_291_197;
 
@@ -49,7 +51,7 @@ contract HypMinterTest is Test {
 
         // Deploy the contract
         // Initialize with a timestamp in the past for testing
-        uint256 firstTimestamp = block.timestamp - 31 days;
+        firstTimestamp = block.timestamp - 31 days;
         // 2025-10-17 23:14:47 GMT
         uint256 mintAllowedTimestamp = 1_760_742_887;
 
@@ -69,6 +71,7 @@ contract HypMinterTest is Test {
         // Set hypMinter to the proxy
         hypMinter = HypMinter(address(proxy));
         OPERATOR_BPS = hypMinter.operatorBps();
+        distributionDelay = hypMinter.distributionDelay();
 
         // Label addresses for better test output
         vm.label(address(HYPER), "HYPER");
@@ -103,11 +106,12 @@ contract HypMinterTest is Test {
         // Expect Mint event to be emitted
         vm.expectEmit(true, true, true, true);
         emit HypMinter.Mint();
+        hypMinter.mint();
+
         // Expect Distribution event to be emitted with current operator bps
         vm.expectEmit(true, true, true, true);
         emit HypMinter.Distribution(OPERATOR_BPS);
-
-        hypMinter.mintAndDistribute();
+        hypMinter.distributeRewards(firstTimestamp + 30 days);
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount());
     }
 
@@ -116,12 +120,14 @@ contract HypMinterTest is Test {
         skip(30 days);
 
         uint256 initialBalance = HYPER.balanceOf(address(REWARDS));
-        hypMinter.mintAndDistribute();
+        hypMinter.mint();
+        hypMinter.distributeRewards(firstTimestamp + 30 days * 2);
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount());
 
         skip(30 days);
         initialBalance = HYPER.balanceOf(address(REWARDS));
-        hypMinter.mintAndDistribute();
+        hypMinter.mint();
+        hypMinter.distributeRewards(firstTimestamp + 30 days * 3);
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount());
     }
 
@@ -172,11 +178,11 @@ contract HypMinterTest is Test {
 
     // ========== Additional Simple Tests ==========
 
-    function test_mintAndDistribute_RevertsBeforeStartTime() public {
+    function test_mint_RevertsBeforeStartTime() public {
         vm.warp(hypMinter.mintAllowedTimestamp() - 1);
 
         vm.expectRevert("HypMinter: Minting not started");
-        hypMinter.mintAndDistribute();
+        hypMinter.mint();
     }
 
     function test_getOperatorMintAmount_WithDifferentBps() public {

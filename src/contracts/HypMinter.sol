@@ -17,10 +17,20 @@ contract HypMinter is AccessManagedUpgradeable {
      * @notice Timestamp of the last minting operation
      * @dev Used to enforce 30-day epochs between minting operations
      */
-    uint256 public lastMintTimestamp;
+    uint256 public lastRewardTimestamp;
 
     /// @notice Timestamp when minting is first allowed to begin
     uint256 public mintAllowedTimestamp;
+
+    struct DistributionInfo {
+        bool minted;
+        bool distributed;
+    }
+
+    mapping(uint256 rewardTimestamp => DistributionInfo distributionInfo) public rewardDistributions;
+
+    /// @notice Delay between mint time and reward timestamp passed to the rewards contract
+    uint256 public distributionDelay;
 
     /**
      * @notice Total amount of HYPER tokens minted per epoch
@@ -64,11 +74,12 @@ contract HypMinter is AccessManagedUpgradeable {
     event Distribution(uint256 operatorRewardsBps);
     event OperatorBpsSet(uint256 bps);
     event OperatorRewardsManagerSet(address manager);
-
+    event DistributionDelaySet(uint256 distributionDelay);
     /**
      * @notice Constructor that disables initializers for the implementation contract
      * @dev Prevents the implementation contract from being initialized directly
      */
+
     constructor() {
         _disableInitializers();
     }
@@ -88,8 +99,9 @@ contract HypMinter is AccessManagedUpgradeable {
         __AccessManaged_init(address(_accessManager));
 
         // Set minting timestamps
-        lastMintTimestamp = _firstMintTimestamp;
+        lastRewardTimestamp = _firstMintTimestamp;
         mintAllowedTimestamp = _mintAllowedTimestamp;
+        distributionDelay = 7 days;
 
         // Initialize operator rewards settings with default values
         operatorRewardsManager = 0x2522d3797411Aff1d600f647F624713D53b6AA11;
@@ -102,41 +114,56 @@ contract HypMinter is AccessManagedUpgradeable {
     /**
      * @notice Mints HYPER tokens and distributes them to stakers and operators
      * @dev Can only be called after mintAllowedTimestamp and respects 30-day epochs
-     * @dev Mints the full MINT_AMOUNT and splits it between stakers and operators based on operatorBps
      */
-    function mintAndDistribute() external {
+    function mint() external {
         require(block.timestamp >= mintAllowedTimestamp, "HypMinter: Minting not started");
+
+        // Calculate next epoch timestamp (30 days after last mint)
+        uint256 newTimestamp = lastRewardTimestamp + 30 days;
+        require(block.timestamp >= newTimestamp, "HypMinter: Epoch not ready");
+
+        // Update the last mint timestamp for next epoch calculation
+        rewardDistributions[newTimestamp].minted = true;
+        lastRewardTimestamp = newTimestamp;
 
         // Mint the full amount to this contract
         HYPER.mint(address(this), MINT_AMOUNT);
         emit Mint();
-
-        // Distribute rewards to both stakers and operators
-        _distributeStakingRewards();
-        _distributeOperatorRewards();
-        emit Distribution(operatorBps);
     }
 
-    /**
-     * @notice Distributes the staking portion of minted tokens to the rewards contract
-     * @dev Enforces 30-day epochs and updates the lastMintTimestamp
-     * @dev Distributes tokens to the REWARDS contract for the SYMBIOTIC_NETWORK
-     */
-    function _distributeStakingRewards() internal {
-        // Calculate next epoch timestamp (30 days after last mint)
-        uint256 newTimestamp = lastMintTimestamp + 30 days;
-        require(block.timestamp >= newTimestamp, "HypMinter: Epoch not ready");
+    function distributeRewards(
+        uint256 rewardTimestamp
+    ) external {
+        // Check if the distribution is ready
+        require(block.timestamp >= rewardTimestamp + distributionDelay, "HypMinter: Distribution not ready");
 
-        // Update the last mint timestamp for next epoch calculation
-        lastMintTimestamp = newTimestamp;
+        // Check if timestamp is valid and not already distributed
+        DistributionInfo memory distributionInfo = rewardDistributions[rewardTimestamp];
+        require(distributionInfo.minted, "HypMinter: Rewards not minted");
+        require(!distributionInfo.distributed, "HypMinter: Rewards already distributed");
 
-        // Distribute only the staking portion of minted tokens to the rewards contract
+        // Update the distribution info
+        rewardDistributions[rewardTimestamp].distributed = true;
+
+        // Distribute staking rewards
         REWARDS.distributeRewards({
             network: SYMBIOTIC_NETWORK,
             token: address(HYPER),
             amount: getStakingMintAmount(),
-            data: abi.encode(newTimestamp, type(uint256).max, bytes(""), bytes(""))
+            data: abi.encode(rewardTimestamp, type(uint256).max, bytes(""), bytes(""))
         });
+
+        // Distribute operator rewards
+        HYPER.transfer(operatorRewardsManager, getOperatorMintAmount());
+        emit Distribution(operatorBps);
+    }
+
+    function setDistributionDelay(
+        uint256 _distributionDelay
+    ) external restricted {
+        require(_distributionDelay <= 7 days, "HypMinter: Distribution delay must be less than 7 days");
+        distributionDelay = _distributionDelay;
+        emit DistributionDelaySet(_distributionDelay);
     }
 
     /**
@@ -147,14 +174,6 @@ contract HypMinter is AccessManagedUpgradeable {
     function getStakingMintAmount() public view returns (uint256) {
         // Subtract operator rewards to get staking rewards
         return MINT_AMOUNT - getOperatorMintAmount();
-    }
-
-    /**
-     * @notice Distributes operator rewards by transferring tokens directly
-     * @dev Transfers the operator portion of minted tokens to the operatorRewardsManager
-     */
-    function _distributeOperatorRewards() internal {
-        HYPER.transfer(operatorRewardsManager, getOperatorMintAmount());
     }
 
     /**
