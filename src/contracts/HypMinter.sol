@@ -23,7 +23,7 @@ contract HypMinter is AccessManagedUpgradeable {
     uint256 public mintAllowedTimestamp;
 
     struct DistributionInfo {
-        bool minted;
+        uint48 mintTimestamp;
         bool distributed;
     }
 
@@ -86,21 +86,21 @@ contract HypMinter is AccessManagedUpgradeable {
 
     /**
      * @notice Initializes the HypMinter contract
-     * @param _firstMintTimestamp The initial timestamp for the first minting epoch
+     * @param _firstRewardTimestamp The initial timestamp for the first minting epoch
      * @param _mintAllowedTimestamp The timestamp when minting is first allowed to begin
      * @param _accessManager The access manager contract for role-based permissions
      * @dev Sets up the contract with initial timestamps, default operator settings, and approves HYPER tokens for rewards distribution
      */
     function initialize(
-        uint256 _firstMintTimestamp,
+        uint256 _firstRewardTimestamp,
         uint256 _mintAllowedTimestamp,
         AccessManager _accessManager
     ) external initializer {
         __AccessManaged_init(address(_accessManager));
 
         // Set minting timestamps
-        lastRewardTimestamp = _firstMintTimestamp;
-        rewardDistributions[_firstMintTimestamp].minted = true;
+        lastRewardTimestamp = _firstRewardTimestamp;
+        rewardDistributions[_firstRewardTimestamp].mintTimestamp = 1;
         mintAllowedTimestamp = _mintAllowedTimestamp;
         distributionDelay = 7 days;
 
@@ -124,7 +124,7 @@ contract HypMinter is AccessManagedUpgradeable {
         require(block.timestamp >= newTimestamp, "HypMinter: Epoch not ready");
 
         // Update the last mint timestamp for next epoch calculation
-        rewardDistributions[newTimestamp].minted = true;
+        rewardDistributions[newTimestamp].mintTimestamp = uint48(block.timestamp);
         lastRewardTimestamp = newTimestamp;
 
         // Mint the full amount to this contract
@@ -135,12 +135,13 @@ contract HypMinter is AccessManagedUpgradeable {
     function distributeRewards(
         uint256 rewardTimestamp
     ) external {
+        DistributionInfo memory distributionInfo = rewardDistributions[rewardTimestamp];
+
         // Check if the distribution is ready
-        require(block.timestamp >= rewardTimestamp + distributionDelay, "HypMinter: Distribution not ready");
+        require(block.timestamp >= distributionInfo.mintTimestamp + distributionDelay, "HypMinter: Distribution not ready");
 
         // Check if timestamp is valid and not already distributed
-        DistributionInfo memory distributionInfo = rewardDistributions[rewardTimestamp];
-        require(distributionInfo.minted, "HypMinter: Rewards not minted");
+        require(distributionInfo.mintTimestamp > 0, "HypMinter: Rewards not minted");
         require(!distributionInfo.distributed, "HypMinter: Rewards already distributed");
 
         // Update the distribution info

@@ -108,6 +108,8 @@ contract HypMinterTest is Test {
         emit HypMinter.Mint();
         hypMinter.mint();
 
+        skip(hypMinter.distributionDelay());
+
         // Expect Distribution event to be emitted with current operator bps
         vm.expectEmit(true, true, true, true);
         emit HypMinter.Distribution(OPERATOR_BPS);
@@ -121,12 +123,15 @@ contract HypMinterTest is Test {
 
         uint256 initialBalance = HYPER.balanceOf(address(REWARDS));
         hypMinter.mint();
+        skip(hypMinter.distributionDelay());
         hypMinter.distributeRewards(firstTimestamp + 30 days * 2);
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount());
 
         skip(30 days);
         initialBalance = HYPER.balanceOf(address(REWARDS));
         hypMinter.mint();
+
+        skip(hypMinter.distributionDelay());
         hypMinter.distributeRewards(firstTimestamp + 30 days * 3);
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount());
     }
