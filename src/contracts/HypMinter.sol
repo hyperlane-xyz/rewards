@@ -100,9 +100,9 @@ contract HypMinter is AccessManagedUpgradeable {
 
         // Set minting timestamps
         lastRewardTimestamp = _firstRewardTimestamp;
-        rewardDistributions[_firstRewardTimestamp].mintTimestamp = 1;
+        rewardDistributions[_firstRewardTimestamp].mintTimestamp = uint48(_mintAllowedTimestamp);
         mintAllowedTimestamp = _mintAllowedTimestamp;
-        distributionDelay = 7 days;
+        distributionDelay = 6 days;
 
         // Initialize operator rewards settings with default values
         operatorRewardsManager = 0x2522d3797411Aff1d600f647F624713D53b6AA11;
@@ -129,6 +129,9 @@ contract HypMinter is AccessManagedUpgradeable {
 
         // Mint the full amount to this contract
         HYPER.mint(address(this), MINT_AMOUNT);
+        // Transfer operator rewards to operator rewards manager
+        HYPER.transfer(operatorRewardsManager, getOperatorMintAmount());
+
         emit Mint();
     }
 
@@ -138,7 +141,9 @@ contract HypMinter is AccessManagedUpgradeable {
         DistributionInfo memory distributionInfo = rewardDistributions[rewardTimestamp];
 
         // Check if the distribution is ready
-        require(block.timestamp >= distributionInfo.mintTimestamp + distributionDelay, "HypMinter: Distribution not ready");
+        require(
+            block.timestamp >= distributionInfo.mintTimestamp + distributionDelay, "HypMinter: Distribution not ready"
+        );
 
         // Check if timestamp is valid and not already distributed
         require(distributionInfo.mintTimestamp > 0, "HypMinter: Rewards not minted");
@@ -154,9 +159,6 @@ contract HypMinter is AccessManagedUpgradeable {
             amount: getStakingMintAmount(),
             data: abi.encode(rewardTimestamp, type(uint256).max, bytes(""), bytes(""))
         });
-
-        // Distribute operator rewards
-        HYPER.transfer(operatorRewardsManager, getOperatorMintAmount());
         emit Distribution(operatorBps);
     }
 

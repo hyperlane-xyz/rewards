@@ -11,6 +11,7 @@ import {IDefaultStakerRewards} from "../src/interfaces/defaultStakerRewards/IDef
 import {IStakerRewards} from "../src/interfaces/stakerRewards/IStakerRewards.sol";
 import {NetworkMiddlewareService} from "../lib/core/src/contracts/service/NetworkMiddlewareService.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract HypMinterTest is Test {
     HypMinter hypMinter;
@@ -43,7 +44,7 @@ contract HypMinterTest is Test {
     uint256 firstTimestamp;
     uint256 distributionDelay;
     // Fork block number - using a recent block
-    uint256 constant FORK_BLOCK_NUMBER = 23_291_197;
+    uint256 constant FORK_BLOCK_NUMBER = 23_327_196;
 
     function setUp() public {
         // Fork Ethereum mainnet - use fallback if ETH_RPC_URL not set
@@ -51,7 +52,7 @@ contract HypMinterTest is Test {
 
         // Deploy the contract
         // Initialize with a timestamp in the past for testing
-        firstTimestamp = block.timestamp - 31 days;
+        firstTimestamp = 1_752_448_487;
         // 2025-10-17 23:14:47 GMT
         uint256 mintAllowedTimestamp = 1_760_742_887;
 
@@ -82,13 +83,16 @@ contract HypMinterTest is Test {
         vm.label(multisigB, "multisigB");
     }
 
+    function _setMiddleware() internal {
+        if (networkMiddlewareService.middleware(SYMBIOTIC_NETWORK) != address(hypMinter)) {
+            vm.prank(SYMBIOTIC_NETWORK);
+            networkMiddlewareService.setMiddleware(address(hypMinter));
+        }
+    }
+
     function test_mintAndDistribute_SuccessfulDistribution() public {
         // Pre-requisite. Set the network middleware to be HypMinter
-        vm.prank(SYMBIOTIC_NETWORK);
-        networkMiddlewareService.setMiddleware(address(hypMinter));
-
-        // Fast forward to after the start time (2025-10-17 23:14:47 GMT)
-        vm.warp(hypMinter.mintAllowedTimestamp() + 1);
+        _setMiddleware();
 
         // Give the AccessManager the `MINTER_ROLE` on HYPER contract
         // 1. Schedule a grantRole operation via the AccessManager
@@ -103,10 +107,18 @@ contract HypMinterTest is Test {
 
         uint256 initialBalance = HYPER.balanceOf(address(REWARDS));
 
+        // Fast forward to after the start time
+        vm.warp(Math.max(vm.getBlockTimestamp(), hypMinter.mintAllowedTimestamp() + 1));
+        uint256 initialOperatorBalance = HYPER.balanceOf(hypMinter.operatorRewardsManager());
+
         // Expect Mint event to be emitted
         vm.expectEmit(true, true, true, true);
         emit HypMinter.Mint();
         hypMinter.mint();
+        assertEq(
+            HYPER.balanceOf(hypMinter.operatorRewardsManager()) - initialOperatorBalance,
+            hypMinter.getOperatorMintAmount()
+        );
 
         skip(hypMinter.distributionDelay());
 
@@ -134,6 +146,23 @@ contract HypMinterTest is Test {
         skip(hypMinter.distributionDelay());
         hypMinter.distributeRewards(firstTimestamp + 30 days * 3);
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount());
+    }
+
+    function test_one_epoch_minted() public {
+        // We send the mint amount directly to the contract
+        deal(address(HYPER), address(hypMinter), MINT_AMOUNT);
+
+        vm.warp(hypMinter.mintAllowedTimestamp() + hypMinter.distributionDelay() + 1);
+
+        // We distribute the rewards for the first epoch
+        uint256 initialBalance = HYPER.balanceOf(address(REWARDS));
+        _setMiddleware();
+        hypMinter.distributeRewards(firstTimestamp);
+
+        // We expect the staking rewards to be distributed
+        assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount());
+
+        test_3_mints();
     }
 
     function test_mintAndDistribute_CorrectAmountCalculations() public view {
