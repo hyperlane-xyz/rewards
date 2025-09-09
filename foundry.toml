@@ -12,7 +12,7 @@ gas_reports = ["*"]
 gas_limit = "18446744073709551615"
 
 [rpc_endpoints]
-mainnet = "${ETH_RPC_URL}"
+mainnet = "https://eth.merkle.io"
 holesky = "${ETH_RPC_URL_HOLESKY}"
 
 [fmt]
