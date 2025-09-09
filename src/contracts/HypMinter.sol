@@ -22,11 +22,20 @@ contract HypMinter is AccessManagedUpgradeable {
     /// @notice Timestamp when minting is first allowed to begin
     uint256 public mintAllowedTimestamp;
 
+    /**
+     * @notice Information about a reward distribution for a specific timestamp
+     * @param mintTimestamp Timestamp when the rewards were minted for this epoch
+     * @param distributed Whether the rewards have been distributed to stakers
+     */
     struct DistributionInfo {
         uint48 mintTimestamp;
         bool distributed;
     }
 
+    /**
+     * @notice Mapping of reward timestamps to their distribution information
+     * @dev Tracks minting and distribution status for each epoch
+     */
     mapping(uint256 rewardTimestamp => DistributionInfo distributionInfo) public rewardDistributions;
 
     /// @notice Delay between mint time and reward timestamp passed to the rewards contract
@@ -70,10 +79,34 @@ contract HypMinter is AccessManagedUpgradeable {
      */
     uint256 public operatorBps;
 
+    /**
+     * @notice Emitted when HYPER tokens are minted for an epoch
+     * @dev Indicates successful minting of MINT_AMOUNT tokens to the contract
+     */
     event Mint();
+
+    /**
+     * @notice Emitted when rewards are distributed to stakers
+     * @param operatorRewardsBps The percentage of rewards allocated to operators in basis points
+     */
     event Distribution(uint256 operatorRewardsBps);
+
+    /**
+     * @notice Emitted when the operator rewards percentage is updated
+     * @param bps The new operator rewards percentage in basis points (e.g., 1000 = 10%)
+     */
     event OperatorBpsSet(uint256 bps);
+
+    /**
+     * @notice Emitted when the operator rewards manager address is updated
+     * @param manager The new address that will receive operator rewards
+     */
     event OperatorRewardsManagerSet(address manager);
+
+    /**
+     * @notice Emitted when the distribution delay is updated
+     * @param distributionDelay The new delay between minting and distribution in seconds
+     */
     event DistributionDelaySet(uint256 distributionDelay);
     /**
      * @notice Constructor that disables initializers for the implementation contract
@@ -135,6 +168,13 @@ contract HypMinter is AccessManagedUpgradeable {
         emit Mint();
     }
 
+    /**
+     * @notice Distributes minted HYPER tokens to stakers for a specific epoch
+     * @param rewardTimestamp The timestamp of the epoch to distribute rewards for
+     * @dev Can only be called after the distribution delay has passed since minting
+     * @dev Distributes tokens to the rewards contract for stakers and transfers operator rewards directly
+     * @dev Marks the distribution as completed to prevent double distribution
+     */
     function distributeRewards(
         uint256 rewardTimestamp
     ) external {
@@ -162,6 +202,12 @@ contract HypMinter is AccessManagedUpgradeable {
         emit Distribution(operatorBps);
     }
 
+    /**
+     * @notice Sets the delay between minting and when rewards can be distributed
+     * @param _distributionDelay The new distribution delay in seconds (must be ≤ 7 days)
+     * @dev Can only be called by authorized accounts with appropriate access control
+     * @dev Emits DistributionDelaySet event upon successful update
+     */
     function setDistributionDelay(
         uint256 _distributionDelay
     ) external restricted {
