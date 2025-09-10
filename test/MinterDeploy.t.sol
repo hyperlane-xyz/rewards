@@ -121,7 +121,7 @@ contract MinterDeployTest is Test {
 
         assertEq(networkMiddlewareService.middleware(SYMBIOTIC_NETWORK), address(hypMinter));
 
-        // Give the AccessManager the `MINTER_ROLE` on HYPER contract
+        // Give HypMinter the `MINTER_ROLE` on HYPER contract through the AccessManager
         // 1. Schedule a grantRole operation via the AccessManager
         vm.warp(startTimestamp); // Do this the same day as the middleware operations
         vm.prank(multisigB);
@@ -156,6 +156,32 @@ contract MinterDeployTest is Test {
         hypMinter.distributeRewards(firstTimestamp + 90 days);
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount() * 4);
         console2.log("distribution timestamp: ", vm.getBlockTimestamp());
+        assertGt(distributionDeadline, vm.getBlockTimestamp());
+    }
+
+    function test_mintingThroughFoundation() public {
+        address foundation = makeAddr("foundation");
+        uint256 deployDate = 1_757_696_400;
+        vm.warp(deployDate); // Sept 12th 2025
+
+        uint256 startTimestamp = vm.getBlockTimestamp();
+        console2.log("startTimestamp", startTimestamp);
+
+        vm.prank(multisigB);
+        bytes memory data = abi.encodeCall(AccessControl.grantRole, (keccak256("MINTER_ROLE"), foundation));
+        accessManager.schedule(address(HYPER), data, 0);
+
+        // 2. Execute the operation
+        vm.prank(multisigB);
+        skip(30 days);
+        accessManager.execute(address(HYPER), data);
+
+        uint256 distributionDeadline = 1_761_051_600 + 5 hours; // Tuesday, October 21, 2025 6:00:00 PM GMT (1 week and 5 hours after minting is allowed)
+        uint256 initialBalance = HYPER.balanceOf(address(foundation));
+
+        vm.prank(foundation);
+        HYPER.mint(address(foundation), MINT_AMOUNT);
+        assertEq(HYPER.balanceOf(address(foundation)) - initialBalance, MINT_AMOUNT);
         assertGt(distributionDeadline, vm.getBlockTimestamp());
     }
 }
