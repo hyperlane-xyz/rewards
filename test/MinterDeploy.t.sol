@@ -46,7 +46,7 @@ contract MinterDeployTest is Test {
     uint256 firstTimestamp;
     uint256 distributionDelay;
     // Fork block number - using a recent block
-    uint256 constant FORK_BLOCK_NUMBER = 23_291_197;
+    uint256 constant FORK_BLOCK_NUMBER = 23_327_196;
 
     uint256 mintAllowedTimestamp = 1_760_446_800; // Tuesday, October 14, 2025 1:00:00 PM GMT-04:00 DST
 
@@ -83,7 +83,8 @@ contract MinterDeployTest is Test {
     }
 
     function test_fullFlow() public {
-        vm.warp(1_757_696_400); // Sept 12th 2025
+        uint256 deployDate = 1_757_696_400;
+        vm.warp(deployDate); // Sept 12th 2025
 
         uint256 startTimestamp = vm.getBlockTimestamp();
         console2.log("startTimestamp", startTimestamp);
@@ -137,69 +138,24 @@ contract MinterDeployTest is Test {
 
         // Fast forward to after the start time
         vm.warp(Math.max(vm.getBlockTimestamp(), hypMinter.mintAllowedTimestamp() + 1));
-        uint256 initialBalance = HYPER.balanceOf(address(REWARDS));
 
         // Three mints
+        deal(address(HYPER), address(hypMinter), MINT_AMOUNT); // We send the already minted amount to the contract
+        uint256 initialBalance = HYPER.balanceOf(address(REWARDS));
         hypMinter.mint();
         hypMinter.mint();
         hypMinter.mint();
 
-        // Three distributions
         skip(7 days);
         uint256 distributionDeadline = 1_761_051_600 + 5 hours; // Tuesday, October 21, 2025 6:00:00 PM GMT (1 week and 5 hours after minting is allowed)
 
+        // Four distributions
+        hypMinter.distributeRewards(firstTimestamp);
         hypMinter.distributeRewards(firstTimestamp + 30 days);
         hypMinter.distributeRewards(firstTimestamp + 60 days);
         hypMinter.distributeRewards(firstTimestamp + 90 days);
-        assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount() * 3);
+        assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount() * 4);
         console2.log("distribution timestamp: ", vm.getBlockTimestamp());
         assertGt(distributionDeadline, vm.getBlockTimestamp());
     }
-
-    // Sketches
-    // function _setMiddleware() internal {
-    //     bytes memory setMiddlewareData = abi.encodeCall(NetworkMiddlewareService.setMiddleware, (address(hypMinter)));
-    //     bytes memory networkScheduleData = abi.encodeCall(
-    //         TimelockController.schedule,
-    //         (address(networkMiddlewareService), 0, setMiddlewareData, bytes32(0), bytes32(0), 0 days)
-    //     );
-
-    //     bytes memory accessManagerScheduleData = abi.encodeCall(
-    //         AccessManager.schedule, (SYMBIOTIC_NETWORK, networkScheduleData, uint48(vm.getBlockTimestamp()))
-    //     );
-    //     bytes memory accessManagerExecuteData =
-    //         abi.encodeCall(AccessManager.execute, (SYMBIOTIC_NETWORK, accessManagerScheduleData));
-
-    //     address[] memory targets = new address[](2);
-    //     targets[0] = address(accessManager);
-    //     targets[1] = address(accessManager);
-
-    //     uint256[] memory values = new uint256[](2);
-    //     values[0] = 0;
-    //     values[1] = 0;
-
-    //     bytes[] memory payloads = new bytes[](2);
-    //     payloads[0] = accessManagerScheduleData;
-    //     payloads[1] = accessManagerExecuteData;
-
-    //     vm.prank(multisigB);
-    //     timelockController.scheduleBatch({
-    //         targets: targets,
-    //         values: values,
-    //         payloads: payloads,
-    //         predecessor: bytes32(0),
-    //         salt: bytes32(0),
-    //         delay: 14 days
-    //     });
-
-    //     skip(14 days);
-    //     vm.prank(makeAddr("alice"));
-    //     timelockController.executeBatch({
-    //         targets: targets,
-    //         values: values,
-    //         payloads: payloads,
-    //         predecessor: bytes32(0),
-    //         salt: bytes32(0)
-    //     });
-    // }
 }
