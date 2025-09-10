@@ -21,6 +21,7 @@ contract HypMinterTest is Test {
     event Distribution(uint256 operatorRewardsBps);
     event OperatorBpsSet(uint256 bps);
     event OperatorRewardsManagerSet(address manager);
+    event DistributionDelaySet(uint256 distributionDelay);
 
     // Reward contract addresses
     IERC20Mintable HYPER;
@@ -302,6 +303,70 @@ contract HypMinterTest is Test {
         assertEq(allowance, type(uint256).max);
     }
 
+    // ========== Distribution Delay Tests ==========
+
+    function test_setDistributionDelay_Success() public {
+        uint256 newDelay = 3 days;
+        
+        vm.prank(accessManagerAdmin);
+        // Expect DistributionDelaySet event to be emitted
+        vm.expectEmit(true, true, true, true);
+        emit DistributionDelaySet(newDelay);
+        hypMinter.setDistributionDelay(newDelay);
+
+        assertEq(hypMinter.distributionDelay(), newDelay);
+    }
+
+    function test_setDistributionDelay_MaxDelay() public {
+        uint256 newDelay = 7 days;
+        
+        vm.prank(accessManagerAdmin);
+        vm.expectEmit(true, true, true, true);
+        emit DistributionDelaySet(newDelay);
+        hypMinter.setDistributionDelay(newDelay);
+
+        assertEq(hypMinter.distributionDelay(), newDelay);
+    }
+
+    function test_setDistributionDelay_RevertsWhenTooLarge() public {
+        uint256 invalidDelay = 7 days + 1;
+        
+        vm.prank(accessManagerAdmin);
+        vm.expectRevert("HypMinter: Distribution delay must be less than 7 days");
+        hypMinter.setDistributionDelay(invalidDelay);
+    }
+
+    function test_setDistributionDelay_RevertsWhenUnauthorized() public {
+        address unauthorized = makeAddr("unauthorized");
+        uint256 newDelay = 1 days;
+        
+        vm.prank(unauthorized);
+        vm.expectRevert();
+        hypMinter.setDistributionDelay(newDelay);
+    }
+
+    function test_setDistributionDelay_AffectsDistributionTiming() public {
+        // Set up minting first
+        test_mintAndDistribute_SuccessfulDistribution();
+        
+        // Change distribution delay to 1 day
+        uint256 newDelay = 1 days;
+        vm.prank(accessManagerAdmin);
+        hypMinter.setDistributionDelay(newDelay);
+        
+        // Skip 30 days for next epoch and mint
+        skip(30 days);
+        hypMinter.mint();
+        
+        // Should not be able to distribute immediately
+        vm.expectRevert("HypMinter: Distribution not ready");
+        hypMinter.distributeRewards(firstTimestamp + 60 days);
+        
+        // Skip 1 day (the new delay) and should work
+        skip(1 days);
+        hypMinter.distributeRewards(firstTimestamp + 60 days);
+    }
+
     // ========== Fuzz Tests ==========
 
     function testFuzz_operatorRewardsBps(
@@ -336,5 +401,30 @@ contract HypMinterTest is Test {
             assertEq(hypMinter.getOperatorMintAmount(), MINT_AMOUNT);
             assertEq(hypMinter.getStakingMintAmount(), 0);
         }
+    }
+
+    function testFuzz_setDistributionDelay(
+        uint256 delay
+    ) public {
+        // Only test valid delay values (0 to 7 days)
+        vm.assume(delay <= 7 days);
+
+        // Set the distribution delay
+        vm.prank(accessManagerAdmin);
+        hypMinter.setDistributionDelay(delay);
+
+        // Verify the value was set correctly
+        assertEq(hypMinter.distributionDelay(), delay);
+    }
+
+    function testFuzz_setDistributionDelay_RevertsWhenTooLarge(
+        uint256 delay
+    ) public {
+        // Test values larger than 7 days
+        vm.assume(delay > 7 days && delay < type(uint256).max / 2); // Avoid overflow
+
+        vm.prank(accessManagerAdmin);
+        vm.expectRevert("HypMinter: Distribution delay must be less than 7 days");
+        hypMinter.setDistributionDelay(delay);
     }
 }
