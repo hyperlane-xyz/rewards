@@ -176,6 +176,21 @@ contract HypMinterTest is Test {
         assertEq(operatorAmount + stakingAmount, MINT_AMOUNT);
     }
 
+      function test_cannotDistributeTwice() public {
+        test_mintAndDistribute_SuccessfulDistribution();
+        
+        // Try to distribute the same epoch again
+        vm.expectRevert("HypMinter: Rewards already distributed");
+        hypMinter.distributeRewards(firstTimestamp + 30 days);
+    }
+
+    function test_cannotDistributeBeforeMint() public {
+        uint256 futureTimestamp = firstTimestamp + 90 days;
+        
+        vm.expectRevert("HypMinter: Rewards not minted");
+        hypMinter.distributeRewards(futureTimestamp);
+    }
+
     function test_setOperatorRewardsBps() public {
         uint256 newBps = 1500; // 15%
         vm.prank(accessManagerAdmin);
@@ -367,6 +382,92 @@ contract HypMinterTest is Test {
         hypMinter.distributeRewards(firstTimestamp + 60 days);
     }
 
+
+    function test_distributionDelay_EdgeCaseTiming() public {
+        test_mintAndDistribute_SuccessfulDistribution();
+        
+        // Set delay to 1 second
+        vm.prank(accessManagerAdmin);
+        hypMinter.setDistributionDelay(1);
+        
+        // Next mint
+        skip(30 days);
+        hypMinter.mint();
+        
+        // Should fail exactly at mint time
+        vm.expectRevert("HypMinter: Distribution not ready");
+        hypMinter.distributeRewards(firstTimestamp + 60 days);
+        
+        // Should work exactly 1 second later
+        skip(1);
+        hypMinter.distributeRewards(firstTimestamp + 60 days);
+    }
+
+    // ========== Misc Tests =========
+    function test_setOperatorManager_AffectsNextMint() public {
+        test_mintAndDistribute_SuccessfulDistribution();
+        
+        // Change operator manager
+        address newManager = makeAddr("newOperatorManager");
+        vm.prank(accessManagerAdmin);
+        hypMinter.setOperatorRewardsManager(newManager);
+        
+        uint256 initialBalance = HYPER.balanceOf(newManager);
+        
+        // Next mint should go to new manager
+        skip(30 days);
+        hypMinter.mint();
+        
+        uint256 finalBalance = HYPER.balanceOf(newManager);
+        uint256 expectedIncrease = hypMinter.getOperatorMintAmount();
+        
+        assertEq(finalBalance - initialBalance, expectedIncrease);
+    }
+
+
+    function test_rewardDistributions_StateTracking() public {
+        uint256 epochTimestamp = firstTimestamp + 30 days;
+        
+        // Before mint - should be empty
+        (uint48 mintTimestamp, bool distributed) = hypMinter.rewardDistributions(epochTimestamp);
+        assertEq(mintTimestamp, 0);
+        assertFalse(distributed);
+        
+        // After setup but before our mint
+        test_mintAndDistribute_SuccessfulDistribution();
+        
+        // Check first epoch state
+        (mintTimestamp, distributed) = hypMinter.rewardDistributions(epochTimestamp);
+        assertTrue(mintTimestamp > 0);
+        assertTrue(distributed);
+        
+        // Mint next epoch
+        skip(30 days);
+        uint256 mintTime = vm.getBlockTimestamp();
+        hypMinter.mint();
+        
+        uint256 nextEpochTimestamp = epochTimestamp + 30 days;
+        (mintTimestamp, distributed) = hypMinter.rewardDistributions(nextEpochTimestamp);
+        assertEq(mintTimestamp, uint48(mintTime));
+        assertFalse(distributed); // Not distributed yet
+    }
+
+    function test_lastRewardTimestamp_Updates() public {
+        uint256 initialTimestamp = hypMinter.lastRewardTimestamp();
+        
+        test_mintAndDistribute_SuccessfulDistribution();
+        
+        uint256 afterFirstMint = hypMinter.lastRewardTimestamp();
+        assertEq(afterFirstMint, initialTimestamp + 30 days);
+        
+        // Next mint
+        skip(30 days);
+        hypMinter.mint();
+        
+        uint256 afterSecondMint = hypMinter.lastRewardTimestamp();
+        assertEq(afterSecondMint, afterFirstMint + 30 days);
+    }
+
     // ========== Fuzz Tests ==========
 
     function testFuzz_operatorRewardsBps(
@@ -426,5 +527,191 @@ contract HypMinterTest is Test {
         vm.prank(accessManagerAdmin);
         vm.expectRevert("HypMinter: Distribution delay must be less than 7 days");
         hypMinter.setDistributionDelay(delay);
+    }
+
+    // ========== Advanced Fuzz Tests ==========
+
+    function testFuzz_mint_DistributeWorkflow(
+        uint256 operatorBps,
+        uint256 delayDays
+    ) public {
+        // Bound inputs to valid ranges
+        operatorBps = bound(operatorBps, 0, MAX_BPS);
+        delayDays = bound(delayDays, 0, 7);
+        uint256 delay = delayDays * 1 days;
+
+        // Set up with random parameters
+        vm.prank(accessManagerAdmin);
+        hypMinter.setOperatorRewardsBps(operatorBps);
+        vm.prank(accessManagerAdmin);
+        hypMinter.setDistributionDelay(delay);
+
+        // Set up initial successful distribution
+        test_mintAndDistribute_SuccessfulDistribution();
+
+        address operatorManager = hypMinter.operatorRewardsManager();
+        uint256 operatorInitialBalance = HYPER.balanceOf(operatorManager);
+        uint256 rewardsInitialBalance = HYPER.balanceOf(address(REWARDS));
+
+        // Next epoch
+        skip(30 days);
+        uint256 epochTimestamp = firstTimestamp + 60 days;
+        hypMinter.mint();
+
+        // Verify operator got their share immediately
+        uint256 expectedOperatorAmount = (MINT_AMOUNT * operatorBps) / MAX_BPS;
+        assertEq(
+            HYPER.balanceOf(operatorManager) - operatorInitialBalance,
+            expectedOperatorAmount
+        );
+
+        // Try to distribute before delay - should fail if delay > 0
+        if (delay > 0) {
+            if (delay > 1) skip(delay - 1);
+            vm.expectRevert("HypMinter: Distribution not ready");
+            hypMinter.distributeRewards(epochTimestamp);
+            skip(1);
+        }
+
+        // Distribute after delay
+        hypMinter.distributeRewards(epochTimestamp);
+
+        // Verify stakers got their share
+        uint256 expectedStakingAmount = MINT_AMOUNT - expectedOperatorAmount;
+        assertEq(
+            HYPER.balanceOf(address(REWARDS)) - rewardsInitialBalance,
+            expectedStakingAmount
+        );
+
+        // Verify total amounts add up
+        assertEq(expectedOperatorAmount + expectedStakingAmount, MINT_AMOUNT);
+    }
+
+    function testFuzz_multipleEpochs_ConsistentState(
+        uint8 numEpochs
+    ) public {
+        // Bound to reasonable number of epochs
+        numEpochs = uint8(bound(numEpochs, 1, 10));
+
+        test_mintAndDistribute_SuccessfulDistribution();
+
+        uint256 totalMinted = MINT_AMOUNT; // First mint from setup
+        uint256 currentTimestamp = firstTimestamp + 30 days;
+
+        for (uint256 i = 0; i < numEpochs; i++) {
+            skip(30 days);
+            currentTimestamp += 30 days;
+
+            // Mint
+            hypMinter.mint();
+            totalMinted += MINT_AMOUNT;
+
+            // Verify state
+            (uint48 mintTimestamp, bool distributed) = hypMinter.rewardDistributions(currentTimestamp);
+            assertTrue(mintTimestamp > 0);
+            assertFalse(distributed);
+
+            // Distribute
+            skip(distributionDelay);
+            hypMinter.distributeRewards(currentTimestamp);
+
+            // Verify distributed
+            (, distributed) = hypMinter.rewardDistributions(currentTimestamp);
+            assertTrue(distributed);
+        }
+
+        // Verify lastRewardTimestamp is correct
+        assertEq(hypMinter.lastRewardTimestamp(), currentTimestamp);
+    }
+
+    // ========== Invariant Tests ==========
+
+    function test_invariant_totalSupplyIncreasesCorrectly() public {
+        uint256 initialSupply = HYPER.totalSupply();
+        
+        test_mintAndDistribute_SuccessfulDistribution();
+        
+        uint256 afterFirstMint = HYPER.totalSupply();
+        assertEq(afterFirstMint - initialSupply, MINT_AMOUNT);
+
+        // Multiple mints
+        for (uint256 i = 0; i < 5; i++) {
+            skip(30 days);
+            hypMinter.mint();
+        }
+
+        uint256 finalSupply = HYPER.totalSupply();
+        assertEq(finalSupply - initialSupply, MINT_AMOUNT * 6); // 1 + 5 mints
+    }
+
+    function test_invariant_operatorPlusStakingEqualsTotal() public {
+        // Test invariant across different BPS values
+        uint256[] memory bpsValues = new uint256[](5);
+        bpsValues[0] = 0;
+        bpsValues[1] = 500;   // 5%
+        bpsValues[2] = 1000;  // 10%
+        bpsValues[3] = 5000;  // 50%
+        bpsValues[4] = 10000; // 100%
+
+        for (uint256 i = 0; i < bpsValues.length; i++) {
+            vm.prank(accessManagerAdmin);
+            hypMinter.setOperatorRewardsBps(bpsValues[i]);
+
+            uint256 operatorAmount = hypMinter.getOperatorMintAmount();
+            uint256 stakingAmount = hypMinter.getStakingMintAmount();
+
+            // Invariant: operator + staking = total
+            assertEq(operatorAmount + stakingAmount, MINT_AMOUNT);
+            
+            // Verify calculations
+            assertEq(operatorAmount, (MINT_AMOUNT * bpsValues[i]) / MAX_BPS);
+            assertEq(stakingAmount, MINT_AMOUNT - operatorAmount);
+        }
+    }
+
+    function test_invariant_cannotDistributeInFuture() public {
+        test_mintAndDistribute_SuccessfulDistribution();
+        
+        // Try various future timestamps
+        uint256[] memory futureOffsets = new uint256[](4);
+        futureOffsets[0] = 60 days;
+        futureOffsets[1] = 90 days;
+        futureOffsets[2] = 365 days;
+        futureOffsets[3] = 1000 days;
+
+        for (uint256 i = 0; i < futureOffsets.length; i++) {
+            uint256 futureTimestamp = firstTimestamp + futureOffsets[i];
+            vm.expectRevert("HypMinter: Rewards not minted");
+            hypMinter.distributeRewards(futureTimestamp);
+        }
+    }
+
+    // ========== Gas Optimization Tests ==========
+
+    function test_gas_multipleOperations() public {
+        test_mintAndDistribute_SuccessfulDistribution();
+        
+        // Measure gas for subsequent operations
+        uint256 gasBefore = gasleft();
+        
+        skip(30 days);
+        hypMinter.mint();
+        
+        uint256 gasAfterMint = gasleft();
+        uint256 mintGas = gasBefore - gasAfterMint;
+        
+        skip(distributionDelay);
+        hypMinter.distributeRewards(firstTimestamp + 60 days);
+        
+        uint256 gasAfterDistribute = gasleft();
+        uint256 distributeGas = gasAfterMint - gasAfterDistribute;
+        
+        // Log gas usage for analysis
+        console2.log("Mint gas used:", mintGas);
+        console2.log("Distribute gas used:", distributeGas);
+        
+        // Basic assertions that operations didn't use excessive gas
+        assertTrue(mintGas < 500_000, "Mint used too much gas");
+        assertTrue(distributeGas < 500_000, "Distribute used too much gas");
     }
 }
