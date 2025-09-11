@@ -58,7 +58,7 @@ contract HypMinterTest is Test {
         uint256 mintAllowedTimestamp = 1_760_742_887;
 
         // Read constants from implementation contract
-        hypMinter = new HypMinter();
+        hypMinter = new HypMinter(7 days);
         HYPER = hypMinter.HYPER();
         REWARDS = hypMinter.REWARDS();
         SYMBIOTIC_NETWORK = hypMinter.SYMBIOTIC_NETWORK();
@@ -324,7 +324,7 @@ contract HypMinterTest is Test {
     }
 
     function test_setDistributionDelay_MaxDelay() public {
-        uint256 newDelay = 7 days;
+        uint256 newDelay = hypMinter.distributionDelayMaximum();
         
         vm.prank(accessManagerAdmin);
         vm.expectEmit(true, true, true, true);
@@ -335,7 +335,7 @@ contract HypMinterTest is Test {
     }
 
     function test_setDistributionDelay_RevertsWhenTooLarge() public {
-        uint256 invalidDelay = 7 days + 1;
+        uint256 invalidDelay = hypMinter.distributionDelayMaximum() + 1;
         
         vm.prank(accessManagerAdmin);
         vm.expectRevert("HypMinter: Distribution delay must be less than 7 days");

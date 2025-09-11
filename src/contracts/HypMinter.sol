@@ -39,8 +39,11 @@ contract HypMinter is AccessManagedUpgradeable {
      */
     mapping(uint256 rewardTimestamp => DistributionInfo distributionInfo) public rewardDistributions;
 
-    /// @notice Delay between mint time and reward timestamp passed to the rewards contract
+    /// @notice Delay between mint time and distribution time.
     uint256 public distributionDelay;
+
+    /// @notice Maximum delay between mint time and distribution time.
+    uint256 public immutable  distributionDelayMaximum;
 
     /**
      * @notice Total amount of HYPER tokens minted per epoch
@@ -117,7 +120,8 @@ contract HypMinter is AccessManagedUpgradeable {
      * @dev Prevents the implementation contract from being initialized directly
      */
 
-    constructor() {
+    constructor(uint256 _distributionDelayMaximum) {
+        distributionDelayMaximum = _distributionDelayMaximum;
         _disableInitializers();
     }
 
@@ -216,7 +220,7 @@ contract HypMinter is AccessManagedUpgradeable {
     function setDistributionDelay(
         uint256 _distributionDelay
     ) external restricted {
-        require(_distributionDelay <= 7 days, "HypMinter: Distribution delay must be less than 7 days");
+        require(_distributionDelay <= distributionDelayMaximum, "HypMinter: Distribution delay must be less than 7 days");
         distributionDelay = _distributionDelay;
         emit DistributionDelaySet(_distributionDelay);
     }
