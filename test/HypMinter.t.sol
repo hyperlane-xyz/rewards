@@ -125,7 +125,7 @@ contract HypMinterTest is Test {
 
         // Expect Distribution event to be emitted with current operator bps
         vm.expectEmit(true, true, true, true);
-        emit HypMinter.Distribution(OPERATOR_BPS);
+        emit HypMinter.Distribution(hypMinter.operatorBps());
         hypMinter.distributeRewards(firstTimestamp + 30 days);
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount());
     }
@@ -272,15 +272,6 @@ contract HypMinterTest is Test {
         assertEq(hypMinter.operatorBps(), 0);
         assertEq(hypMinter.getOperatorMintAmount(), 0);
         assertEq(hypMinter.getStakingMintAmount(), MINT_AMOUNT);
-    }
-
-    function test_setOperatorRewardsBps_WithMaxBps() public {
-        vm.prank(accessManagerAdmin);
-        hypMinter.setOperatorRewardsBps(MAX_BPS);
-
-        assertEq(hypMinter.operatorBps(), MAX_BPS);
-        assertEq(hypMinter.getOperatorMintAmount(), MINT_AMOUNT);
-        assertEq(hypMinter.getStakingMintAmount(), 0);
     }
 
     function test_amountCalculations_AlwaysAddUp() public {
@@ -473,8 +464,8 @@ contract HypMinterTest is Test {
     function testFuzz_operatorRewardsBps(
         uint256 bps
     ) public {
-        // Only test valid bps values (0 to MAX_BPS = 10,000)
-        vm.assume(bps <= MAX_BPS);
+        // Only test valid bps values [0, MAX_BPS = 10,000)
+        vm.assume(bps < MAX_BPS);
 
         // Set the operator rewards percentage
         vm.prank(accessManagerAdmin);
@@ -536,7 +527,7 @@ contract HypMinterTest is Test {
         uint256 delayDays
     ) public {
         // Bound inputs to valid ranges
-        operatorBps = bound(operatorBps, 0, MAX_BPS);
+        operatorBps = bound(operatorBps, 0, MAX_BPS - 1);
         delayDays = bound(delayDays, 0, 7);
         uint256 delay = delayDays * 1 days;
 
@@ -651,7 +642,7 @@ contract HypMinterTest is Test {
         bpsValues[1] = 500;   // 5%
         bpsValues[2] = 1000;  // 10%
         bpsValues[3] = 5000;  // 50%
-        bpsValues[4] = 10000; // 100%
+        bpsValues[4] = 10000 - 1; // 100%
 
         for (uint256 i = 0; i < bpsValues.length; i++) {
             vm.prank(accessManagerAdmin);

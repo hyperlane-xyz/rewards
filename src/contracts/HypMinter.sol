@@ -5,6 +5,7 @@ import {AccessManagedUpgradeable} from "@openzeppelin/contracts-upgradeable/acce
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 
 import {IDefaultStakerRewards} from "../interfaces/defaultStakerRewards/IDefaultStakerRewards.sol";
+import {IVaultTokenized} from "../../lib/core/src/interfaces/vault/IVaultTokenized.sol";
 import {IERC20Mintable} from "../interfaces/IERC20Mintable.sol";
 
 /**
@@ -49,6 +50,9 @@ contract HypMinter is AccessManagedUpgradeable {
 
     /// @notice The HYPER token contract
     IERC20Mintable public constant HYPER = IERC20Mintable(0x93A2Db22B7c736B341C32Ff666307F4a9ED910F5);
+
+    /// @notice The staked HYPER token contract. This is a symbiotic vault.
+    IVaultTokenized public constant STAKED_HYPER = IVaultTokenized(0xE1F23869776c82f691d9Cb34597Ab1830Fb0De58);
 
     /**
      * @notice The staker rewards distribution contract
@@ -153,7 +157,7 @@ contract HypMinter is AccessManagedUpgradeable {
         require(block.timestamp >= mintAllowedTimestamp, "HypMinter: Minting not started");
 
         // Calculate next epoch timestamp (30 days after last mint)
-        uint256 newTimestamp = lastRewardTimestamp + 30 days;
+        uint256 newTimestamp = lastRewardTimestamp + STAKED_HYPER.epochDuration();
         require(block.timestamp >= newTimestamp, "HypMinter: Epoch not ready");
 
         // Update the last mint timestamp for next epoch calculation
@@ -244,7 +248,7 @@ contract HypMinter is AccessManagedUpgradeable {
     function setOperatorRewardsBps(
         uint256 bps
     ) external restricted {
-        require(bps <= MAX_BPS, "HypMinter: Invalid BPS");
+        require(bps < MAX_BPS, "HypMinter: Invalid BPS");
         operatorBps = bps;
         emit OperatorBpsSet(bps);
     }
