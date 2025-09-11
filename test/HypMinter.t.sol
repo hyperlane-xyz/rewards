@@ -338,7 +338,7 @@ contract HypMinterTest is Test {
         uint256 invalidDelay = hypMinter.distributionDelayMaximum() + 1;
         
         vm.prank(accessManagerAdmin);
-        vm.expectRevert("HypMinter: Distribution delay must be less than 7 days");
+        vm.expectRevert("HypMinter: Distribution delay too large");
         hypMinter.setDistributionDelay(invalidDelay);
     }
 
@@ -512,11 +512,11 @@ contract HypMinterTest is Test {
     function testFuzz_setDistributionDelay_RevertsWhenTooLarge(
         uint256 delay
     ) public {
-        // Test values larger than 7 days
+        // Test values larger than distributionDelayMaximum
         vm.assume(delay > 7 days && delay < type(uint256).max / 2); // Avoid overflow
 
         vm.prank(accessManagerAdmin);
-        vm.expectRevert("HypMinter: Distribution delay must be less than 7 days");
+        vm.expectRevert("HypMinter: Distribution delay too large");
         hypMinter.setDistributionDelay(delay);
     }
 

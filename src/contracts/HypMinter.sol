@@ -220,7 +220,7 @@ contract HypMinter is AccessManagedUpgradeable {
     function setDistributionDelay(
         uint256 _distributionDelay
     ) external restricted {
-        require(_distributionDelay <= distributionDelayMaximum, "HypMinter: Distribution delay must be less than 7 days");
+        require(_distributionDelay <= distributionDelayMaximum, "HypMinter: Distribution delay too large");
         distributionDelay = _distributionDelay;
         emit DistributionDelaySet(_distributionDelay);
     }
