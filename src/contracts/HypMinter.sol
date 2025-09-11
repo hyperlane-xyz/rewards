@@ -131,7 +131,8 @@ contract HypMinter is AccessManagedUpgradeable {
     function initialize(
         uint256 _firstRewardTimestamp,
         uint256 _mintAllowedTimestamp,
-        AccessManager _accessManager
+        AccessManager _accessManager,
+        uint256 _distributionDelay
     ) external initializer {
         __AccessManaged_init(address(_accessManager));
 
@@ -139,7 +140,7 @@ contract HypMinter is AccessManagedUpgradeable {
         lastRewardTimestamp = _firstRewardTimestamp;
         rewardDistributions[_firstRewardTimestamp].mintTimestamp = uint48(_mintAllowedTimestamp);
         mintAllowedTimestamp = _mintAllowedTimestamp;
-        distributionDelay = 6 days;
+        distributionDelay = _distributionDelay;
 
         // Initialize operator rewards settings with default values
         operatorRewardsManager = 0x2522d3797411Aff1d600f647F624713D53b6AA11;

@@ -68,7 +68,7 @@ contract HypMinterTest is Test {
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
             address(hypMinter),
             address(this),
-            abi.encodeCall(HypMinter.initialize, (firstTimestamp, mintAllowedTimestamp, accessManager))
+            abi.encodeCall(HypMinter.initialize, (firstTimestamp, mintAllowedTimestamp, accessManager, 6 days))
         );
         // Set hypMinter to the proxy
         hypMinter = HypMinter(address(proxy));
@@ -300,7 +300,7 @@ contract HypMinterTest is Test {
     function test_initialization_CannotReinitialize() public {
         // Try to initialize again - should revert
         vm.expectRevert();
-        hypMinter.initialize(block.timestamp, block.timestamp + 30 days, accessManager);
+        hypMinter.initialize(block.timestamp, block.timestamp + 30 days, accessManager, 6 days);
     }
 
     function test_hyper_HasCorrectApproval() public {
