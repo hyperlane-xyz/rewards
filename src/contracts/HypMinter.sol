@@ -43,7 +43,7 @@ contract HypMinter is AccessManagedUpgradeable {
     uint256 public distributionDelay;
 
     /// @notice Maximum delay between mint time and distribution time.
-    uint256 public immutable  distributionDelayMaximum;
+    uint256 public immutable distributionDelayMaximum;
 
     /**
      * @notice Total amount of HYPER tokens minted per epoch
@@ -120,7 +120,9 @@ contract HypMinter is AccessManagedUpgradeable {
      * @dev Prevents the implementation contract from being initialized directly
      */
 
-    constructor(uint256 _distributionDelayMaximum) {
+    constructor(
+        uint256 _distributionDelayMaximum
+    ) {
         distributionDelayMaximum = _distributionDelayMaximum;
         _disableInitializers();
     }
