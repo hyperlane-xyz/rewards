@@ -28,16 +28,17 @@ contract HypMinter is AccessManagedUpgradeable {
      * @param mintTimestamp Timestamp when the rewards were minted for this epoch
      * @param distributed Whether the rewards have been distributed to stakers
      */
-    struct DistributionInfo {
-        uint48 mintTimestamp;
-        bool distributed;
+    enum DistributionStatus {
+        NOT_MINTED,
+        MINTED,
+        DISTRIBUTED
     }
 
     /**
      * @notice Mapping of reward timestamps to their distribution information
      * @dev Tracks minting and distribution status for each epoch
      */
-    mapping(uint256 rewardTimestamp => DistributionInfo distributionInfo) public rewardDistributions;
+    mapping(uint256 rewardTimestamp => DistributionStatus distributionStatus) public rewardDistributions;
 
     /// @notice Delay between mint time and distribution time.
     uint256 public distributionDelay;
@@ -149,7 +150,7 @@ contract HypMinter is AccessManagedUpgradeable {
 
         // Set minting timestamps
         lastRewardTimestamp = _firstRewardTimestamp;
-        rewardDistributions[_firstRewardTimestamp].mintTimestamp = uint48(_mintAllowedTimestamp);
+        rewardDistributions[_firstRewardTimestamp] = DistributionStatus.MINTED;
         mintAllowedTimestamp = _mintAllowedTimestamp;
         distributionDelay = _distributionDelay;
         distributionAllowedTimestamp = _distributionAllowedTimestamp;
@@ -174,7 +175,7 @@ contract HypMinter is AccessManagedUpgradeable {
         require(block.timestamp >= newTimestamp, "HypMinter: Epoch not ready");
 
         // Update the last mint timestamp for next epoch calculation
-        rewardDistributions[newTimestamp].mintTimestamp = uint48(block.timestamp);
+        rewardDistributions[newTimestamp] = DistributionStatus.MINTED;
         lastRewardTimestamp = newTimestamp;
 
         // Mint the full amount to this contract
@@ -197,19 +198,18 @@ contract HypMinter is AccessManagedUpgradeable {
     ) external {
         require(block.timestamp >= distributionAllowedTimestamp, "HypMinter: Distribution not allowed");
 
-        DistributionInfo memory distributionInfo = rewardDistributions[rewardTimestamp];
-
         // Check if the distribution is ready
-        require(
-            block.timestamp >= distributionInfo.mintTimestamp + distributionDelay, "HypMinter: Distribution not ready"
-        );
+        require(block.timestamp >= rewardTimestamp + distributionDelay, "HypMinter: Distribution not ready");
+
+        DistributionStatus distributionStatus = rewardDistributions[rewardTimestamp];
 
         // Check if timestamp is valid and not already distributed
-        require(distributionInfo.mintTimestamp > 0, "HypMinter: Rewards not minted");
-        require(!distributionInfo.distributed, "HypMinter: Rewards already distributed");
+        require(
+            distributionStatus == DistributionStatus.MINTED, "HypMinter: Rewards must be available for distribution"
+        );
 
         // Update the distribution info
-        rewardDistributions[rewardTimestamp].distributed = true;
+        rewardDistributions[rewardTimestamp] = DistributionStatus.DISTRIBUTED;
 
         // Distribute staking rewards
         REWARDS.distributeRewards({
