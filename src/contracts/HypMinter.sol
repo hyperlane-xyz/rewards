@@ -45,6 +45,9 @@ contract HypMinter is AccessManagedUpgradeable {
     /// @notice Maximum delay between mint time and distribution time.
     uint256 public immutable  distributionDelayMaximum;
 
+    /// @notice Timestamp when distribution is allowed to begin
+    uint256 public distributionAllowedTimestamp;
+
     /**
      * @notice Total amount of HYPER tokens minted per epoch
      * @dev Fixed at 666,667 HYPER tokens per minting cycle
@@ -133,10 +136,12 @@ contract HypMinter is AccessManagedUpgradeable {
      * @dev Sets up the contract with initial timestamps, default operator settings, and approves HYPER tokens for rewards distribution
      */
     function initialize(
+        AccessManager _accessManager,
         uint256 _firstRewardTimestamp,
         uint256 _mintAllowedTimestamp,
-        AccessManager _accessManager,
-        uint256 _distributionDelay
+        uint256 _distributionAllowedTimestamp,
+        uint256 _distributionDelay,
+        address _operatorRewardsManager
     ) external initializer {
         __AccessManaged_init(address(_accessManager));
 
@@ -145,9 +150,10 @@ contract HypMinter is AccessManagedUpgradeable {
         rewardDistributions[_firstRewardTimestamp].mintTimestamp = uint48(_mintAllowedTimestamp);
         mintAllowedTimestamp = _mintAllowedTimestamp;
         distributionDelay = _distributionDelay;
+        distributionAllowedTimestamp = _distributionAllowedTimestamp;
 
         // Initialize operator rewards settings with default values
-        operatorRewardsManager = 0x2522d3797411Aff1d600f647F624713D53b6AA11;
+        operatorRewardsManager = _operatorRewardsManager;
         operatorBps = 1000;
 
         // Approve maximum HYPER tokens for rewards distribution to avoid future approval calls
@@ -187,6 +193,8 @@ contract HypMinter is AccessManagedUpgradeable {
     function distributeRewards(
         uint256 rewardTimestamp
     ) external {
+        require(block.timestamp >= distributionAllowedTimestamp, "HypMinter: Distribution not allowed");
+
         DistributionInfo memory distributionInfo = rewardDistributions[rewardTimestamp];
 
         // Check if the distribution is ready
@@ -213,7 +221,7 @@ contract HypMinter is AccessManagedUpgradeable {
 
     /**
      * @notice Sets the delay between minting and when rewards can be distributed
-     * @param _distributionDelay The new distribution delay in seconds (must be ≤ 7 days)
+     * @param _distributionDelay The new distribution delay in seconds (must be ≤ distributionDelayMaximum)
      * @dev Can only be called by authorized accounts with appropriate access control
      * @dev Emits DistributionDelaySet event upon successful update
      */

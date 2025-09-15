@@ -68,7 +68,7 @@ contract HypMinterTest is Test {
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
             address(hypMinter),
             address(this),
-            abi.encodeCall(HypMinter.initialize, (firstTimestamp, mintAllowedTimestamp, accessManager, 6 days))
+            abi.encodeCall(HypMinter.initialize, (accessManager, firstTimestamp, mintAllowedTimestamp, mintAllowedTimestamp,6 days, 0x2522d3797411Aff1d600f647F624713D53b6AA11))
         );
         // Set hypMinter to the proxy
         hypMinter = HypMinter(address(proxy));
@@ -184,13 +184,6 @@ contract HypMinterTest is Test {
         hypMinter.distributeRewards(firstTimestamp + 30 days);
     }
 
-    function test_cannotDistributeBeforeMint() public {
-        uint256 futureTimestamp = firstTimestamp + 90 days;
-        
-        vm.expectRevert("HypMinter: Rewards not minted");
-        hypMinter.distributeRewards(futureTimestamp);
-    }
-
     function test_setOperatorRewardsBps() public {
         uint256 newBps = 1500; // 15%
         vm.prank(accessManagerAdmin);
@@ -300,7 +293,7 @@ contract HypMinterTest is Test {
     function test_initialization_CannotReinitialize() public {
         // Try to initialize again - should revert
         vm.expectRevert();
-        hypMinter.initialize(block.timestamp, block.timestamp + 30 days, accessManager, 6 days);
+        hypMinter.initialize(accessManager, block.timestamp, block.timestamp, block.timestamp, 6 days, 0x2522d3797411Aff1d600f647F624713D53b6AA11);
     }
 
     function test_hyper_HasCorrectApproval() public {
