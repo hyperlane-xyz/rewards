@@ -187,12 +187,25 @@ contract MinterDeployTest is Test {
         skip(30 days);
         accessManager.execute(address(HYPER), data);
 
-        uint256 distributionDeadline = 1761055200; // Tuesday, October 21, 2025 10:00:00 AM EST (1 week after minting is allowed)
-        uint256 initialBalance = HYPER.balanceOf(address(foundation));
 
+        address dummyNetwork = 0xd96F4688873d00dc73B49F3fa2cC6925D7A64E8B;
+        uint256 distributionDeadline = 1761055200; // Tuesday, October 21, 2025 10:00:00 AM EST (1 week after minting is allowed)
+        uint256 initialBalanceNetwork= HYPER.balanceOf(dummyNetwork);
+
+        // Mint  HYPER tokens to dummy network
         vm.prank(foundation);
-        HYPER.mint(address(foundation), MINT_AMOUNT);
-        assertEq(HYPER.balanceOf(address(foundation)) - initialBalance, MINT_AMOUNT);
+        HYPER.mint(dummyNetwork, MINT_AMOUNT);
+        assertEq(HYPER.balanceOf(dummyNetwork) - initialBalanceNetwork, MINT_AMOUNT);
         assertGt(distributionDeadline, vm.getBlockTimestamp());
+
+
+        // Distribute rewards through dummy network
+        uint256 initialBalanceREWARDS = HYPER.balanceOf(address(REWARDS));
+        vm.startPrank(dummyNetwork);
+        HYPER.approve(address(REWARDS), MINT_AMOUNT);
+        REWARDS.distributeRewards(dummyNetwork, address(HYPER), MINT_AMOUNT, abi.encode(firstTimestamp, type(uint256).max, bytes(""), bytes("")));
+        assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalanceREWARDS, MINT_AMOUNT);
+        assertGt(distributionDeadline, vm.getBlockTimestamp());
+        vm.stopPrank();
     }
 }
