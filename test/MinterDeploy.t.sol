@@ -139,15 +139,22 @@ contract MinterDeployTest is Test {
         // Fast forward to after the start time
         vm.warp(Math.max(vm.getBlockTimestamp(), hypMinter.mintAllowedTimestamp() + 1));
 
-        // Three mints
-        deal(address(HYPER), address(hypMinter), MINT_AMOUNT); // We send the already minted amount to the contract
+        
+        // We send the already minted amount to the contract
+        vm.prank(0x79271FB18A9Bfa8b8d987bc27A063Dc6F2912F52);
+        HYPER.transfer(address(hypMinter), MINT_AMOUNT);
+
+        // Three mints, yielding 4 epochs worth of rewards
         uint256 initialBalance = HYPER.balanceOf(address(REWARDS));
         hypMinter.mint();
         hypMinter.mint();
         hypMinter.mint();
 
+        vm.expectRevert("HypMinter: Epoch not ready");
+        hypMinter.mint();
+
         skip(7 days);
-        uint256 distributionDeadline = 1_761_051_600 + 5 hours; // Tuesday, October 21, 2025 6:00:00 PM GMT (1 week and 5 hours after minting is allowed)
+        uint256 distributionDeadline = 1761055200; // Tuesday, October 21, 2025 10:00:00 AM EST (1 week after minting is allowed)
 
         // Four distributions
         hypMinter.distributeRewards(firstTimestamp);
@@ -157,6 +164,10 @@ contract MinterDeployTest is Test {
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount() * 4);
         console2.log("distribution timestamp: ", vm.getBlockTimestamp());
         assertGt(distributionDeadline, vm.getBlockTimestamp());
+
+        // Expect revert when trying to distribute rewards again
+        vm.expectRevert("HypMinter: Rewards already distributed");
+        hypMinter.distributeRewards(firstTimestamp + 90 days);
     }
 
     function test_mintingThroughFoundation() public {
@@ -176,7 +187,7 @@ contract MinterDeployTest is Test {
         skip(30 days);
         accessManager.execute(address(HYPER), data);
 
-        uint256 distributionDeadline = 1_761_051_600 + 5 hours; // Tuesday, October 21, 2025 6:00:00 PM GMT (1 week and 5 hours after minting is allowed)
+        uint256 distributionDeadline = 1761055200; // Tuesday, October 21, 2025 10:00:00 AM EST (1 week after minting is allowed)
         uint256 initialBalance = HYPER.balanceOf(address(foundation));
 
         vm.prank(foundation);
