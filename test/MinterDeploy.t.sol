@@ -208,4 +208,30 @@ contract MinterDeployTest is Test {
         assertGt(distributionDeadline, vm.getBlockTimestamp());
         vm.stopPrank();
     }
+
+    function test_simultaneousSchedules() public {
+        uint256 deployDate = 1_757_696_400;
+        vm.warp(deployDate); // Sept 12th 2025
+
+        uint256 startTimestamp = vm.getBlockTimestamp();
+        console2.log("startTimestamp", startTimestamp);
+
+         // Give HypMinter the `MINTER_ROLE` on HYPER contract through the AccessManager
+        // 1. Schedule a grantRole operation via the AccessManager
+        vm.warp(startTimestamp); // Do this the same day as the middleware operations
+        vm.prank(multisigB);
+        bytes memory data1 = abi.encodeCall(AccessControl.grantRole, (keccak256("MINTER_ROLE"), address(hypMinter)));
+        accessManager.schedule(address(HYPER), data1, 0);
+        address foundation = makeAddr("foundation");
+         vm.prank(multisigB);
+        bytes memory data2 = abi.encodeCall(AccessControl.grantRole, (keccak256("MINTER_ROLE"), address(foundation)));
+        accessManager.schedule(address(HYPER), data2, 0);
+
+
+        skip(30 days);
+        vm.startPrank(multisigB);
+        accessManager.execute(address(HYPER), data1);
+        accessManager.execute(address(HYPER), data2);
+        vm.stopPrank();
+    }
 }
