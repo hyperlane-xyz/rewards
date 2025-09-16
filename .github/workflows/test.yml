@@ -25,3 +25,18 @@ jobs:
         run: |
           forge test -vvv
         id: test
+
+      - name: Run pipeline
+        run: |
+          ./script/pipeline.sh
+        id: pipeline
+
+      - name: Upload pipeline artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnosis-transactions
+          path: |
+            schedule_transactions.json
+            execute_network_transactions.json
+            execute_minter_transactions.json
+            execute_foundation_transactions.json
