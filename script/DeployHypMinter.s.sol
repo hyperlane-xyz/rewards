@@ -71,8 +71,7 @@ contract DeployHypMinter is Script {
         DeployConfig memory config
     ) internal {
         // Start broadcast
-        address deployer = _getDeployer();
-        vm.startBroadcast(deployer);
+        vm.startBroadcast();
 
         bytes32 salt = keccak256(abi.encode(config));
 
@@ -129,9 +128,5 @@ contract DeployHypMinter is Script {
         );
 
         console2.log("All verifications passed!");
-    }
-
-    function _getDeployer() internal returns (address) {
-        return vm.rememberKey(vm.envUint("PRIVATE_KEY"));
     }
 }
