@@ -31,12 +31,14 @@ contract DeployHypMinter is Script {
     }
 
     function run() public {
+        uint256 distributionAllowedTimestamp = 1_761_141_600; // Wednesday, October 22, 2025 10:00:00 AM GMT-04:00
+        uint256 distributionDelay = 7 days;
         run({
             _accessManager: AccessManager(0x3D079E977d644c914a344Dcb5Ba54dB243Cc4863),
             _firstRewardTimestamp: 1_752_448_487, // Sun Jul 13 2025 19:14:47 EDT
-            _mintAllowedTimestamp: 1_760_536_800, // Wednesday, October 15, 2025 10:00:00 AM GMT-04:00 DST
-            _distributionAllowedTimestamp: 1_761_141_600, // Wednesday, October 22, 2025 10:00:00 AM GMT-04:00
-            _distributionDelay: 7 days,
+            _mintAllowedTimestamp: distributionAllowedTimestamp - distributionDelay, // Wednesday, October 15, 2025 10:00:00 AM GMT-04:00 DST
+            _distributionAllowedTimestamp: distributionAllowedTimestamp,
+            _distributionDelay: distributionDelay,
             _operatorRewardsManager: 0x562Dfaac27A84be6C96273F5c9594DA1681C0DA7 // Multisig A
         });
     }
@@ -81,7 +83,7 @@ contract DeployHypMinter is Script {
         bytes memory initData = abi.encodeCall(
             HypMinter.initialize,
             (
-                AccessManager(config.accessManager),
+                config.accessManager,
                 config.firstRewardTimestamp,
                 config.mintAllowedTimestamp,
                 config.distributionAllowedTimestamp,
@@ -94,7 +96,7 @@ contract DeployHypMinter is Script {
         console2.log("Deploying TransparentUpgradeableProxy...");
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
             address(implementation),
-            deployer, // Use deployer as proxy admin
+            address(config.accessManager), // Use access manager as proxy admin
             initData
         );
         console2.log("Proxy deployed at:", address(proxy));
@@ -104,46 +106,8 @@ contract DeployHypMinter is Script {
 
         vm.stopBroadcast();
 
-        // Log deployment summary
-        logDeploymentSummary(hypMinter, implementation, config);
-
         // Verify deployment
         verifyDeployment(hypMinter, config);
-    }
-
-    function logDeploymentSummary(HypMinter hypMinter, HypMinter implementation, DeployConfig memory config) internal {
-        console2.log("\n=== HypMinter Deployment Summary ===");
-        console2.log("Implementation:", address(implementation));
-        console2.log("Proxy (HypMinter):", address(hypMinter));
-        console2.log("Proxy Admin:", _getDeployer());
-        console2.log("Access Manager:", address(config.accessManager));
-        console2.log("");
-
-        console2.log("=== Configuration ===");
-        console2.log("First Reward Timestamp:", config.firstRewardTimestamp);
-        console2.log("Mint Allowed Timestamp:", config.mintAllowedTimestamp);
-        console2.log("Distribution Delay Maximum:", hypMinter.distributionDelayMaximum(), "seconds");
-        console2.log("Distribution Delay:", config.distributionDelay, "seconds");
-        console2.log("");
-
-        console2.log("=== Contract Constants ===");
-        console2.log("HYPER Token:", address(hypMinter.HYPER()));
-        console2.log("Rewards Contract:", address(hypMinter.REWARDS()));
-        console2.log("Symbiotic Network:", hypMinter.SYMBIOTIC_NETWORK());
-        console2.log("Mint Amount per Epoch:", hypMinter.MINT_AMOUNT() / 1e18, "HYPER");
-        console2.log("");
-
-        console2.log("=== Initial Settings ===");
-        console2.log("Operator BPS:", hypMinter.operatorBps(), "basis points");
-        console2.log("Operator Manager:", hypMinter.operatorRewardsManager());
-        console2.log("Distribution Delay:", hypMinter.distributionDelay(), "seconds");
-        console2.log("");
-
-        console2.log("=== Next Steps ===");
-        console2.log("1. Set middleware: Call networkMiddlewareService.setMiddleware(address(hypMinter))");
-        console2.log("2. Grant MINTER_ROLE: Call HYPER.grantRole(keccak256('MINTER_ROLE'), address(hypMinter))");
-        console2.log("3. Wait for mint allowed timestamp:", config.mintAllowedTimestamp);
-        console2.log("4. Start minting epochs every 30 days");
     }
 
     function verifyDeployment(HypMinter hypMinter, DeployConfig memory config) internal view {

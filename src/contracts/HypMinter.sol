@@ -24,11 +24,6 @@ contract HypMinter is AccessManagedUpgradeable {
     uint256 public mintAllowedTimestamp;
 
     /**
-     * @notice Information about a reward distribution for a specific timestamp
-     * @param mintTimestamp Timestamp when the rewards were minted for this epoch
-     * @param distributed Whether the rewards have been distributed to stakers
-     */
-    /**
      * @notice Enumeration representing the distribution status of rewards for an epoch
      * @param NOT_MINTED Rewards have not been minted for this epoch yet
      * @param MINTED Rewards have been minted but not yet distributed
@@ -134,6 +129,7 @@ contract HypMinter is AccessManagedUpgradeable {
      * @param distributionDelay The new delay between reward timestamp and distribution in seconds
      */
     event DistributionDelaySet(uint256 distributionDelay);
+
     /**
      * @notice Constructor that sets the maximum distribution delay and disables initializers
      * @param _distributionDelayMaximum The maximum allowed delay between minting and distribution
