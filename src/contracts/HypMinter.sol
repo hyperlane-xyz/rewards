@@ -5,6 +5,7 @@ import {AccessManagedUpgradeable} from "@openzeppelin/contracts-upgradeable/acce
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 
 import {IDefaultStakerRewards} from "../interfaces/defaultStakerRewards/IDefaultStakerRewards.sol";
+import {IVaultTokenized} from "../../lib/core/src/interfaces/vault/IVaultTokenized.sol";
 import {IERC20Mintable} from "../interfaces/IERC20Mintable.sol";
 
 /**
@@ -23,23 +24,40 @@ contract HypMinter is AccessManagedUpgradeable {
     uint256 public mintAllowedTimestamp;
 
     /**
-     * @notice Information about a reward distribution for a specific timestamp
-     * @param mintTimestamp Timestamp when the rewards were minted for this epoch
-     * @param distributed Whether the rewards have been distributed to stakers
+     * @notice Enumeration representing the distribution status of rewards for an epoch
+     * @param NOT_MINTED Rewards have not been minted for this epoch yet
+     * @param MINTED Rewards have been minted but not yet distributed
+     * @param DISTRIBUTED Rewards have been minted and distributed to stakers
      */
-    struct DistributionInfo {
-        uint48 mintTimestamp;
-        bool distributed;
+    enum DistributionStatus {
+        NOT_MINTED,
+        MINTED,
+        DISTRIBUTED
     }
 
     /**
      * @notice Mapping of reward timestamps to their distribution information
      * @dev Tracks minting and distribution status for each epoch
      */
-    mapping(uint256 rewardTimestamp => DistributionInfo distributionInfo) public rewardDistributions;
+    mapping(uint256 rewardTimestamp => DistributionStatus distributionStatus) public rewardDistributions;
 
-    /// @notice Delay between mint time and reward timestamp passed to the rewards contract
+    /**
+     * @notice Delay between reward timestamp and distribution time
+     * @dev This is the minimum time that must pass between a reward timestamp and when rewards can be distributed
+     */
     uint256 public distributionDelay;
+
+    /**
+     * @notice Maximum delay between reward timestamp and distribution time
+     * @dev Upper bound for distributionDelay to prevent excessively long delays
+     */
+    uint256 public immutable distributionDelayMaximum;
+
+    /**
+     * @notice Timestamp when distribution is allowed to begin
+     * @dev Used to prevent distributions before a certain time, even if the distribution delay has passed
+     */
+    uint256 public distributionAllowedTimestamp;
 
     /**
      * @notice Total amount of HYPER tokens minted per epoch
@@ -49,6 +67,9 @@ contract HypMinter is AccessManagedUpgradeable {
 
     /// @notice The HYPER token contract
     IERC20Mintable public constant HYPER = IERC20Mintable(0x93A2Db22B7c736B341C32Ff666307F4a9ED910F5);
+
+    /// @notice The staked HYPER token contract. This is a symbiotic vault.
+    IVaultTokenized public constant STAKED_HYPER = IVaultTokenized(0xE1F23869776c82f691d9Cb34597Ab1830Fb0De58);
 
     /**
      * @notice The staker rewards distribution contract
@@ -105,40 +126,52 @@ contract HypMinter is AccessManagedUpgradeable {
 
     /**
      * @notice Emitted when the distribution delay is updated
-     * @param distributionDelay The new delay between minting and distribution in seconds
+     * @param distributionDelay The new delay between reward timestamp and distribution in seconds
      */
     event DistributionDelaySet(uint256 distributionDelay);
+
     /**
-     * @notice Constructor that disables initializers for the implementation contract
+     * @notice Constructor that sets the maximum distribution delay and disables initializers
+     * @param _distributionDelayMaximum The maximum allowed delay between minting and distribution
      * @dev Prevents the implementation contract from being initialized directly
      */
-
-    constructor() {
+    constructor(
+        uint256 _distributionDelayMaximum
+    ) {
+        distributionDelayMaximum = _distributionDelayMaximum;
         _disableInitializers();
     }
 
     /**
      * @notice Initializes the HypMinter contract
+     * @param _accessManager The access manager contract for role-based permissions
      * @param _firstRewardTimestamp The initial timestamp for the first minting epoch
      * @param _mintAllowedTimestamp The timestamp when minting is first allowed to begin
-     * @param _accessManager The access manager contract for role-based permissions
+     * @param _distributionAllowedTimestamp The timestamp when distribution is first allowed to begin
+     * @param _distributionDelay The delay between reward timestamp and when rewards can be distributed
+     * @param _operatorRewardsManager The address that will receive operator rewards
      * @dev Sets up the contract with initial timestamps, default operator settings, and approves HYPER tokens for rewards distribution
      */
     function initialize(
+        AccessManager _accessManager,
         uint256 _firstRewardTimestamp,
         uint256 _mintAllowedTimestamp,
-        AccessManager _accessManager
+        uint256 _distributionAllowedTimestamp,
+        uint256 _distributionDelay,
+        address _operatorRewardsManager
     ) external initializer {
         __AccessManaged_init(address(_accessManager));
 
         // Set minting timestamps
         lastRewardTimestamp = _firstRewardTimestamp;
-        rewardDistributions[_firstRewardTimestamp].mintTimestamp = uint48(_mintAllowedTimestamp);
+        // Note that the rewards for the first epoch have already been minted
+        rewardDistributions[_firstRewardTimestamp] = DistributionStatus.MINTED;
         mintAllowedTimestamp = _mintAllowedTimestamp;
-        distributionDelay = 6 days;
+        distributionDelay = _distributionDelay;
+        distributionAllowedTimestamp = _distributionAllowedTimestamp;
 
         // Initialize operator rewards settings with default values
-        operatorRewardsManager = 0x2522d3797411Aff1d600f647F624713D53b6AA11;
+        operatorRewardsManager = _operatorRewardsManager;
         operatorBps = 1000;
 
         // Approve maximum HYPER tokens for rewards distribution to avoid future approval calls
@@ -153,11 +186,11 @@ contract HypMinter is AccessManagedUpgradeable {
         require(block.timestamp >= mintAllowedTimestamp, "HypMinter: Minting not started");
 
         // Calculate next epoch timestamp (30 days after last mint)
-        uint256 newTimestamp = lastRewardTimestamp + 30 days;
+        uint256 newTimestamp = lastRewardTimestamp + STAKED_HYPER.epochDuration();
         require(block.timestamp >= newTimestamp, "HypMinter: Epoch not ready");
 
         // Update the last mint timestamp for next epoch calculation
-        rewardDistributions[newTimestamp].mintTimestamp = uint48(block.timestamp);
+        rewardDistributions[newTimestamp] = DistributionStatus.MINTED;
         lastRewardTimestamp = newTimestamp;
 
         // Mint the full amount to this contract
@@ -178,19 +211,20 @@ contract HypMinter is AccessManagedUpgradeable {
     function distributeRewards(
         uint256 rewardTimestamp
     ) external {
-        DistributionInfo memory distributionInfo = rewardDistributions[rewardTimestamp];
+        require(block.timestamp >= distributionAllowedTimestamp, "HypMinter: Distribution not allowed");
 
         // Check if the distribution is ready
-        require(
-            block.timestamp >= distributionInfo.mintTimestamp + distributionDelay, "HypMinter: Distribution not ready"
-        );
+        require(block.timestamp >= rewardTimestamp + distributionDelay, "HypMinter: Distribution not ready");
+
+        DistributionStatus distributionStatus = rewardDistributions[rewardTimestamp];
 
         // Check if timestamp is valid and not already distributed
-        require(distributionInfo.mintTimestamp > 0, "HypMinter: Rewards not minted");
-        require(!distributionInfo.distributed, "HypMinter: Rewards already distributed");
+        require(
+            distributionStatus == DistributionStatus.MINTED, "HypMinter: Rewards must be available for distribution"
+        );
 
         // Update the distribution info
-        rewardDistributions[rewardTimestamp].distributed = true;
+        rewardDistributions[rewardTimestamp] = DistributionStatus.DISTRIBUTED;
 
         // Distribute staking rewards
         REWARDS.distributeRewards({
@@ -203,15 +237,15 @@ contract HypMinter is AccessManagedUpgradeable {
     }
 
     /**
-     * @notice Sets the delay between minting and when rewards can be distributed
-     * @param _distributionDelay The new distribution delay in seconds (must be ≤ 7 days)
+     * @notice Sets the delay between reward timestamp and when rewards can be distributed
+     * @param _distributionDelay The new distribution delay in seconds (must be ≤ distributionDelayMaximum)
      * @dev Can only be called by authorized accounts with appropriate access control
      * @dev Emits DistributionDelaySet event upon successful update
      */
     function setDistributionDelay(
         uint256 _distributionDelay
     ) external restricted {
-        require(_distributionDelay <= 7 days, "HypMinter: Distribution delay must be less than 7 days");
+        require(_distributionDelay <= distributionDelayMaximum, "HypMinter: Distribution delay too large");
         distributionDelay = _distributionDelay;
         emit DistributionDelaySet(_distributionDelay);
     }
@@ -244,7 +278,7 @@ contract HypMinter is AccessManagedUpgradeable {
     function setOperatorRewardsBps(
         uint256 bps
     ) external restricted {
-        require(bps <= MAX_BPS, "HypMinter: Invalid BPS");
+        require(bps < MAX_BPS, "HypMinter: Invalid BPS");
         operatorBps = bps;
         emit OperatorBpsSet(bps);
     }
