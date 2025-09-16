@@ -37,6 +37,7 @@ contract HypMinterTest is Test {
     AccessManager accessManager = AccessManager(0x3D079E977d644c914a344Dcb5Ba54dB243Cc4863);
     address accessManagerAdmin = 0xfA842f02439Af6d91d7D44525956F9E5e00e339f;
     address multisigB = 0xec2EdC01a2Fbade68dBcc80947F43a5B408cC3A0;
+    address multisigA = 0x562Dfaac27A84be6C96273F5c9594DA1681C0DA7;
 
     // Symbiotic network addresses
     NetworkMiddlewareService networkMiddlewareService =
@@ -72,14 +73,7 @@ contract HypMinterTest is Test {
             address(this),
             abi.encodeCall(
                 HypMinter.initialize,
-                (
-                    accessManager,
-                    firstTimestamp,
-                    mintAllowedTimestamp,
-                    mintAllowedTimestamp,
-                    6 days,
-                    0x2522d3797411Aff1d600f647F624713D53b6AA11
-                )
+                (accessManager, firstTimestamp, mintAllowedTimestamp, mintAllowedTimestamp, 6 days, multisigA)
             )
         );
         // Set hypMinter to the proxy
@@ -305,14 +299,7 @@ contract HypMinterTest is Test {
     function test_initialization_CannotReinitialize() public {
         // Try to initialize again - should revert
         vm.expectRevert();
-        hypMinter.initialize(
-            accessManager,
-            block.timestamp,
-            block.timestamp,
-            block.timestamp,
-            6 days,
-            0x2522d3797411Aff1d600f647F624713D53b6AA11
-        );
+        hypMinter.initialize(accessManager, block.timestamp, block.timestamp, block.timestamp, 6 days, multisigA);
     }
 
     function test_hyper_HasCorrectApproval() public {
@@ -363,8 +350,6 @@ contract HypMinterTest is Test {
         hypMinter.setDistributionDelay(newDelay);
     }
 
-
-
     // ========== Misc Tests =========
     function test_setOperatorManager_AffectsNextMint() public {
         test_mintAndDistribute_SuccessfulDistribution();
@@ -408,7 +393,6 @@ contract HypMinterTest is Test {
         distributionStatus = hypMinter.rewardDistributions(nextEpochTimestamp);
         assertTrue(distributionStatus == HypMinter.DistributionStatus.MINTED);
     }
-
 
     // ========== Fuzz Tests ==========
 
@@ -593,7 +577,6 @@ contract HypMinterTest is Test {
             assertEq(stakingAmount, MINT_AMOUNT - operatorAmount);
         }
     }
-
 
     // ========== Gas Optimization Tests ==========
 
