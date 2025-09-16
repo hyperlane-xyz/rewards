@@ -64,15 +64,25 @@ contract SimulateMinting is Script, Test {
     }
 
     function run() public {
+        vm.startBroadcast(address(multisigB));
+        uint48 when = uint48(block.timestamp + 30 days);
+        schedule(when);
+        skip(30 days);
+        execute();
+        vm.stopBroadcast();
+
+        uint256 snapshotId = vm.snapshot();
         test_minter();
-        // test_mintingThroughFoundation();
+        vm.revertTo(snapshotId);
+        test_mintingThroughFoundation();
     }
 
     bytes setMiddlewareData;
     bytes networkScheduleData;
     bytes grantMinterRoleData;
+    bytes grantFoundationRoleData;
 
-    function scheduleMinter(uint48 when) public {
+    function schedule(uint48 when) public {
         setMiddlewareData = abi.encodeCall(NetworkMiddlewareService.setMiddleware, (address(hypMinter)));
         networkScheduleData = abi.encodeCall(
             TimelockController.schedule,
@@ -80,36 +90,20 @@ contract SimulateMinting is Script, Test {
         );
 
         grantMinterRoleData = abi.encodeCall(AccessControl.grantRole, (keccak256("MINTER_ROLE"), address(hypMinter)));
+        grantFoundationRoleData = abi.encodeCall(AccessControl.grantRole, (keccak256("MINTER_ROLE"), address(multisigB)));
 
-        // Multisig B can call schedule on network via accessManager
         accessManager.schedule(address(SYMBIOTIC_NETWORK), networkScheduleData, when);
         accessManager.schedule(address(HYPER), grantMinterRoleData, when);
+        accessManager.schedule(address(HYPER), grantFoundationRoleData, when);
     }
 
-    function executeMinter() public {
+    function execute() public {
         accessManager.execute(address(SYMBIOTIC_NETWORK), networkScheduleData);
         accessManager.execute(address(HYPER), grantMinterRoleData);
-    }
-
-    function scheduleFoundation() public {
-        grantMinterRoleData = abi.encodeCall(AccessControl.grantRole, (keccak256("MINTER_ROLE"), address(multisigB)));
-
-        // Multisig B can call schedule on network via accessManager
-        vm.startBroadcast(address(multisigB));
-        {
-            accessManager.schedule(address(HYPER), grantMinterRoleData, 0);
-        }
-        vm.stopBroadcast();
+        accessManager.execute(address(HYPER), grantFoundationRoleData);
     }
 
     function test_minter() public {
-        vm.startBroadcast(address(multisigB));
-        uint48 when = uint48(block.timestamp + 30 days);
-        scheduleMinter(when);
-        skip(30 days);
-        executeMinter();
-        vm.stopBroadcast();
-
         vm.prank(makeAddr("alice"));
         TimelockController(payable(SYMBIOTIC_NETWORK)).execute({
             target: address(networkMiddlewareService),
@@ -156,13 +150,6 @@ contract SimulateMinting is Script, Test {
     }
 
     function test_mintingThroughFoundation() public {
-        scheduleFoundation();
-
-        // 2. Execute the operation
-        skip(30 days);
-        vm.prank(multisigB);
-        accessManager.execute(address(HYPER), grantMinterRoleData);
-
         address dummyNetwork = 0xd96F4688873d00dc73B49F3fa2cC6925D7A64E8B;
         uint256 distributionDeadline = 1761055200; // Tuesday, October 21, 2025 10:00:00 AM EST (1 week after minting is allowed)
         uint256 initialBalanceNetwork= HYPER.balanceOf(dummyNetwork);
