@@ -1,13 +1,14 @@
 #!/bin/bash
 
-anvil --rpc-url $(rpc mainnet3 ethereum) >/dev/null 2>&1 &
+anvil --fork-url $ETH_RPC_URL_MAINNET >/dev/null 2>&1 &
 ANVIL_PID=$!
 trap "kill $ANVIL_PID >/dev/null 2>&1 || true" EXIT
 # wait for anvil to be ready
 until curl -s http://localhost:8545 >/dev/null 2>&1; do sleep 0.5; done
 
-cast rpc anvil_impersonateAccount "0xa7ECcdb9Be08178f896c26b7BbD8C3D4E844d9Ba" --rpc-url http://localhost:8545
-forge script script/DeployHypMinter.s.sol --rpc-url http://localhost:8545 --unlocked --sender 0xa7ECcdb9Be08178f896c26b7BbD8C3D4E844d9Ba  -vvvv --broadcast
+DEPLOYER=0xa7ECcdb9Be08178f896c26b7BbD8C3D4E844d9Ba
+cast rpc anvil_impersonateAccount $DEPLOYER --rpc-url http://localhost:8545
+forge script script/DeployHypMinter.s.sol --rpc-url http://localhost:8545 --unlocked --sender $DEPLOYER  -vvvv --broadcast
 
 MULTISIG_B=0xec2EdC01a2Fbade68dBcc80947F43a5B408cC3A0
 
