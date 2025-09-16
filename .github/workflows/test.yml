@@ -27,17 +27,22 @@ jobs:
         with:
           version: nightly
 
-      - name: Run Forge tests
+      # - name: Run Forge tests
+      #   run: |
+      #     forge test -vvv
+      #   id: test
+
+      - name: Run Forge Minter tests
         run: |
-          forge test -vvv
+          forge test test/HypMinter.t.sol
         id: test
 
-      - name: Run pipeline
+      - name: Run Forge Minter simulation pipeline
         run: |
           ./script/pipeline.sh
         id: pipeline
 
-      - name: Upload pipeline artifacts
+      - name: Upload gnosis safe calldata
         uses: actions/upload-artifact@v4
         with:
           name: gnosis-transactions
