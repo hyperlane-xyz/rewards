@@ -65,10 +65,12 @@ contract SimulateMinting is Script, Test {
 
     function run() public {
         vm.startBroadcast(address(multisigB));
-        uint48 when = uint48(block.timestamp + 30 days);
-        schedule(when);
-        skip(30 days);
-        execute();
+        schedule();
+        skip(7 days);
+        accessManager.execute(address(SYMBIOTIC_NETWORK), networkScheduleData);
+        skip(23 days);
+        accessManager.execute(address(HYPER), grantMinterRoleData);
+        accessManager.execute(address(HYPER), grantFoundationRoleData);
         vm.stopBroadcast();
 
         uint256 snapshotId = vm.snapshot();
@@ -82,7 +84,7 @@ contract SimulateMinting is Script, Test {
     bytes grantMinterRoleData;
     bytes grantFoundationRoleData;
 
-    function schedule(uint48 when) public {
+    function schedule() public {
         setMiddlewareData = abi.encodeCall(NetworkMiddlewareService.setMiddleware, (address(hypMinter)));
         networkScheduleData = abi.encodeCall(
             TimelockController.schedule,
@@ -92,15 +94,10 @@ contract SimulateMinting is Script, Test {
         grantMinterRoleData = abi.encodeCall(AccessControl.grantRole, (keccak256("MINTER_ROLE"), address(hypMinter)));
         grantFoundationRoleData = abi.encodeCall(AccessControl.grantRole, (keccak256("MINTER_ROLE"), address(multisigB)));
 
-        accessManager.schedule(address(SYMBIOTIC_NETWORK), networkScheduleData, when);
-        accessManager.schedule(address(HYPER), grantMinterRoleData, when);
-        accessManager.schedule(address(HYPER), grantFoundationRoleData, when);
-    }
-
-    function execute() public {
-        accessManager.execute(address(SYMBIOTIC_NETWORK), networkScheduleData);
-        accessManager.execute(address(HYPER), grantMinterRoleData);
-        accessManager.execute(address(HYPER), grantFoundationRoleData);
+        // use minimum delay
+        accessManager.schedule(address(SYMBIOTIC_NETWORK), networkScheduleData, 0);
+        accessManager.schedule(address(HYPER), grantMinterRoleData, 0);
+        accessManager.schedule(address(HYPER), grantFoundationRoleData, 0);
     }
 
     function test_minter() public {
