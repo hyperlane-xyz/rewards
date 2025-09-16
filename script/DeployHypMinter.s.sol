@@ -79,6 +79,7 @@ contract DeployHypMinter is Script {
         // Deploy implementation
         console2.log("Deploying HypMinter implementation...");
         HypMinter implementation = new HypMinter{salt: salt}(DISTRIBUTION_DELAY_MAXIMUM);
+
         console2.log("Implementation deployed at:", address(implementation));
 
         // Prepare initialization data
