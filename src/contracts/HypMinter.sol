@@ -164,6 +164,7 @@ contract HypMinter is AccessManagedUpgradeable {
 
         // Set minting timestamps
         lastRewardTimestamp = _firstRewardTimestamp;
+        // Note that the rewards for the first epoch have already been minted
         rewardDistributions[_firstRewardTimestamp] = DistributionStatus.MINTED;
         mintAllowedTimestamp = _mintAllowedTimestamp;
         distributionDelay = _distributionDelay;
