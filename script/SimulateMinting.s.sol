@@ -37,7 +37,6 @@ contract SimulateMinting is Script, Test {
     AccessManager accessManager = AccessManager(0x3D079E977d644c914a344Dcb5Ba54dB243Cc4863);
     address accessManagerAdmin = 0xfA842f02439Af6d91d7D44525956F9E5e00e339f;
     address multisigB = 0xec2EdC01a2Fbade68dBcc80947F43a5B408cC3A0;
-    TimelockController timelockController = TimelockController(payable(0xfA842f02439Af6d91d7D44525956F9E5e00e339f));
 
     // Symbiotic network addresses
     NetworkMiddlewareService networkMiddlewareService =
@@ -64,14 +63,17 @@ contract SimulateMinting is Script, Test {
     }
 
     function run() public {
-        vm.startBroadcast(address(multisigB));
+        vm.startBroadcast(multisigB);
         schedule();
+        vm.stopBroadcast();
+
+        vm.startPrank(multisigB);
         skip(7 days);
         accessManager.execute(address(SYMBIOTIC_NETWORK), networkScheduleData);
         skip(23 days);
         accessManager.execute(address(HYPER), grantMinterRoleData);
         accessManager.execute(address(HYPER), grantFoundationRoleData);
-        vm.stopBroadcast();
+        vm.stopPrank();
 
         uint256 snapshotId = vm.snapshot();
         test_minter();
