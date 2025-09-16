@@ -12,7 +12,10 @@ on:
 jobs:
   run-tests:
     name: Run tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-lates
+
+    env:
+      ETH_RPC_URL_MAINNET: ${{ secrets.ETH_RPC_URL_MAINNET }}
 
     steps:
       - uses: actions/checkout@v4
