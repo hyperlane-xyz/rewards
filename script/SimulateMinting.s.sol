@@ -65,15 +65,12 @@ contract SimulateMinting is Script, Test {
     function run() public {
         vm.startBroadcast(multisigB);
         schedule();
-        vm.stopBroadcast();
-
-        vm.startPrank(multisigB);
         skip(7 days);
         accessManager.execute(address(SYMBIOTIC_NETWORK), networkScheduleData);
         skip(23 days);
         accessManager.execute(address(HYPER), grantMinterRoleData);
         accessManager.execute(address(HYPER), grantFoundationRoleData);
-        vm.stopPrank();
+        vm.stopBroadcast();
 
         uint256 snapshotId = vm.snapshot();
         test_minter();
