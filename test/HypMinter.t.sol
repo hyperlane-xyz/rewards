@@ -74,7 +74,14 @@ contract HypMinterTest is Test {
             address(this),
             abi.encodeCall(
                 HypMinter.initialize,
-                (accessManager, firstTimestamp, distributionAllowedTimestamp - 7 days, distributionAllowedTimestamp, 7 days, multisigA)
+                (
+                    accessManager,
+                    firstTimestamp,
+                    distributionAllowedTimestamp - 7 days,
+                    distributionAllowedTimestamp,
+                    7 days,
+                    multisigA
+                )
             )
         );
         // Set hypMinter to the proxy

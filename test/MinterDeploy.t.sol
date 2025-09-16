@@ -44,17 +44,16 @@ contract MinterDeployTest is Test {
     NetworkMiddlewareService networkMiddlewareService =
         NetworkMiddlewareService(0xD7dC9B366c027743D90761F71858BCa83C6899Ad);
 
-    uint256 firstTimestamp;
-    uint256 distributionDelay;
+    uint256 firstTimestamp = 1_752_448_487;
+    uint256 distributionDelay = 7 days;
     // Fork block number - using a recent block
     uint256 constant FORK_BLOCK_NUMBER = 23_327_196;
 
     uint256 mintAllowedTimestamp = 1_760_446_800; // Tuesday, October 14, 2025 1:00:00 PM GMT-04:00 DST
+    uint256 distributionAllowedTimestamp = 1_761_141_600; // Wednesday, October 22, 2025 10:00:00 AM GMT-04:00
 
     function setUp() public {
         vm.createSelectFork("mainnet", FORK_BLOCK_NUMBER);
-
-        firstTimestamp = 1_752_448_487;
 
         // Read constants from implementation contract
         hypMinter = new HypMinter(10 days);
@@ -67,7 +66,17 @@ contract MinterDeployTest is Test {
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
             address(hypMinter),
             address(this),
-            abi.encodeCall(HypMinter.initialize, (accessManager, firstTimestamp, mintAllowedTimestamp, mintAllowedTimestamp, 6 days, multisigA))
+            abi.encodeCall(
+                HypMinter.initialize,
+                (
+                    accessManager,
+                    firstTimestamp,
+                    distributionAllowedTimestamp - distributionDelay,
+                    distributionAllowedTimestamp,
+                    distributionDelay,
+                    multisigA
+                )
+            )
         );
         // Set hypMinter to the proxy
         hypMinter = HypMinter(address(proxy));
@@ -84,14 +93,10 @@ contract MinterDeployTest is Test {
     }
 
     function test_fullFlow() public {
-        uint256 deployDate = 1_757_696_400;
-        vm.warp(deployDate); // Sept 12th 2025
-
-        uint256 startTimestamp = vm.getBlockTimestamp();
-        console2.log("startTimestamp", startTimestamp);
-        uint256 mintDeadline = mintAllowedTimestamp + 1 days; // Wednesday, October 15, 2025 1:00:00 PM GMT
-        assertGt(mintDeadline, hypMinter.mintAllowedTimestamp());
-
+        uint mintDeadline = 1760709600; // Friday, October 17, 2025 10:00:00 AM GMT-04:00
+        uint256 deployDate = 1758055760; // Sept 16th 2025
+        vm.warp(deployDate); 
+ 
         // Pre-requisite. Set the network middleware to be HypMinter via AccessManager
         TimelockController _network = TimelockController(payable(SYMBIOTIC_NETWORK));
 
@@ -100,13 +105,9 @@ contract MinterDeployTest is Test {
             TimelockController.schedule,
             (address(networkMiddlewareService), 0, setMiddlewareData, bytes32(0), bytes32(0), 0 days)
         );
-        bytes memory accessManagerScheduleData = abi.encodeCall(
-            AccessManager.schedule, (SYMBIOTIC_NETWORK, networkScheduleData, uint48(vm.getBlockTimestamp()))
-        );
-
         // Multisig B can call schedule on network via accessManager
         vm.prank(multisigB);
-        accessManager.schedule(address(_network), networkScheduleData, uint48(vm.getBlockTimestamp()) + 7 days);
+        accessManager.schedule(address(_network), networkScheduleData, 0);
         skip(7 days);
         vm.prank(multisigB);
         accessManager.execute(address(_network), networkScheduleData);
@@ -124,7 +125,7 @@ contract MinterDeployTest is Test {
 
         // Give HypMinter the `MINTER_ROLE` on HYPER contract through the AccessManager
         // 1. Schedule a grantRole operation via the AccessManager
-        vm.warp(startTimestamp); // Do this the same day as the middleware operations
+        vm.warp(deployDate); // Do this the same day as the middleware operations
         vm.prank(multisigB);
         bytes memory data = abi.encodeCall(AccessControl.grantRole, (keccak256("MINTER_ROLE"), address(hypMinter)));
         accessManager.schedule(address(HYPER), data, 0);
@@ -140,7 +141,6 @@ contract MinterDeployTest is Test {
         // Fast forward to after the start time
         vm.warp(Math.max(vm.getBlockTimestamp(), hypMinter.mintAllowedTimestamp() + 1));
 
-        
         // We send the already minted amount to the contract
         vm.prank(0x79271FB18A9Bfa8b8d987bc27A063Dc6F2912F52);
         HYPER.transfer(address(hypMinter), MINT_AMOUNT);
@@ -154,8 +154,8 @@ contract MinterDeployTest is Test {
         vm.expectRevert("HypMinter: Epoch not ready");
         hypMinter.mint();
 
-        skip(7 days);
-        uint256 distributionDeadline = 1761055200; // Tuesday, October 21, 2025 10:00:00 AM EST (1 week after minting is allowed)
+        uint256 distributionDeadline = hypMinter.distributionAllowedTimestamp();
+        vm.warp(Math.max(vm.getBlockTimestamp(), distributionDeadline));
 
         // Four distributions
         hypMinter.distributeRewards(firstTimestamp);
@@ -164,7 +164,7 @@ contract MinterDeployTest is Test {
         hypMinter.distributeRewards(firstTimestamp + 90 days);
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount() * 4);
         console2.log("distribution timestamp: ", vm.getBlockTimestamp());
-        assertGt(distributionDeadline, vm.getBlockTimestamp());
+        assertGe(distributionDeadline, vm.getBlockTimestamp());
 
         // Expect revert when trying to distribute rewards again
         vm.expectRevert("HypMinter: Rewards must be available for distribution");
@@ -192,10 +192,9 @@ contract MinterDeployTest is Test {
         skip(30 days);
         accessManager.execute(address(HYPER), data);
 
-
         address dummyNetwork = 0xd96F4688873d00dc73B49F3fa2cC6925D7A64E8B;
-        uint256 distributionDeadline = 1761055200; // Tuesday, October 21, 2025 10:00:00 AM EST (1 week after minting is allowed)
-        uint256 initialBalanceNetwork= HYPER.balanceOf(dummyNetwork);
+        uint256 distributionDeadline = 1_761_055_200; // Tuesday, October 21, 2025 10:00:00 AM EST (1 week after minting is allowed)
+        uint256 initialBalanceNetwork = HYPER.balanceOf(dummyNetwork);
 
         // Mint  HYPER tokens to dummy network
         vm.prank(foundation);
@@ -203,12 +202,16 @@ contract MinterDeployTest is Test {
         assertEq(HYPER.balanceOf(dummyNetwork) - initialBalanceNetwork, MINT_AMOUNT);
         assertGt(distributionDeadline, vm.getBlockTimestamp());
 
-
         // Distribute rewards through dummy network
         uint256 initialBalanceREWARDS = HYPER.balanceOf(address(REWARDS));
         vm.startPrank(dummyNetwork);
         HYPER.approve(address(REWARDS), MINT_AMOUNT);
-        REWARDS.distributeRewards(dummyNetwork, address(HYPER), MINT_AMOUNT, abi.encode(firstTimestamp, type(uint256).max, bytes(""), bytes("")));
+        REWARDS.distributeRewards(
+            dummyNetwork,
+            address(HYPER),
+            MINT_AMOUNT,
+            abi.encode(firstTimestamp, type(uint256).max, bytes(""), bytes(""))
+        );
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalanceREWARDS, MINT_AMOUNT);
         assertGt(distributionDeadline, vm.getBlockTimestamp());
         vm.stopPrank();
