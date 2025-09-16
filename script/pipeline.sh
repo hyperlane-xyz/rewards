@@ -8,7 +8,7 @@ until curl -s http://localhost:8545 >/dev/null 2>&1; do sleep 0.5; done
 
 DEPLOYER=0xa7ECcdb9Be08178f896c26b7BbD8C3D4E844d9Ba
 cast rpc anvil_impersonateAccount $DEPLOYER --rpc-url http://localhost:8545
-forge script script/DeployHypMinter.s.sol --rpc-url http://localhost:8545 --unlocked --sender $DEPLOYER  -vvvv --broadcast
+forge script script/DeployHypMinter.s.sol --rpc-url http://localhost:8545 --unlocked --sender $DEPLOYER --broadcast --sig "run()" -vvvv
 
 MULTISIG_B=0xec2EdC01a2Fbade68dBcc80947F43a5B408cC3A0
 
@@ -16,7 +16,7 @@ MULTISIG_B=0xec2EdC01a2Fbade68dBcc80947F43a5B408cC3A0
 export MINTER=0x33a9e84C4437599d2317E6A4e4BEbfFe7fD57E5A
 forge script script/SimulateMinting.s.sol --sender $MULTISIG_B --rpc-url http://localhost:8545 --skip-simulation -vvvv
 
-TRANSACTIONS=$(jq '[.transactions[].transaction | {chainId, from, to, gas, value, data: .input}]' broadcast/SimulateMinting.s.sol/1/dry-run/run-latest.json)
+TRANSACTIONS=$(jq '[.transactions[].transaction | {chainId, from, to, gas, value, data: .input}]' ./broadcast/SimulateMinting.s.sol/1/dry-run/run-latest.json)
 
 # Function to create Gnosis transaction format
 create_gnosis_batch() {
