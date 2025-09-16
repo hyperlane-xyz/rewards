@@ -363,8 +363,6 @@ contract HypMinterTest is Test {
         hypMinter.setDistributionDelay(newDelay);
     }
 
-
-
     // ========== Misc Tests =========
     function test_setOperatorManager_AffectsNextMint() public {
         test_mintAndDistribute_SuccessfulDistribution();
@@ -408,7 +406,6 @@ contract HypMinterTest is Test {
         distributionStatus = hypMinter.rewardDistributions(nextEpochTimestamp);
         assertTrue(distributionStatus == HypMinter.DistributionStatus.MINTED);
     }
-
 
     // ========== Fuzz Tests ==========
 
@@ -593,7 +590,6 @@ contract HypMinterTest is Test {
             assertEq(stakingAmount, MINT_AMOUNT - operatorAmount);
         }
     }
-
 
     // ========== Gas Optimization Tests ==========
 
