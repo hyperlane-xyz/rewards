@@ -37,6 +37,7 @@ contract MinterDeployTest is Test {
     AccessManager accessManager = AccessManager(0x3D079E977d644c914a344Dcb5Ba54dB243Cc4863);
     address accessManagerAdmin = 0xfA842f02439Af6d91d7D44525956F9E5e00e339f;
     address multisigB = 0xec2EdC01a2Fbade68dBcc80947F43a5B408cC3A0;
+    address multisigA = 0x562Dfaac27A84be6C96273F5c9594DA1681C0DA7;
     TimelockController timelockController = TimelockController(payable(0xfA842f02439Af6d91d7D44525956F9E5e00e339f));
 
     // Symbiotic network addresses
@@ -56,7 +57,7 @@ contract MinterDeployTest is Test {
         firstTimestamp = 1_752_448_487;
 
         // Read constants from implementation contract
-        hypMinter = new HypMinter();
+        hypMinter = new HypMinter(10 days);
         HYPER = hypMinter.HYPER();
         REWARDS = hypMinter.REWARDS();
         SYMBIOTIC_NETWORK = hypMinter.SYMBIOTIC_NETWORK();
@@ -66,7 +67,7 @@ contract MinterDeployTest is Test {
         TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
             address(hypMinter),
             address(this),
-            abi.encodeCall(HypMinter.initialize, (firstTimestamp, mintAllowedTimestamp, accessManager))
+            abi.encodeCall(HypMinter.initialize, (accessManager, firstTimestamp, mintAllowedTimestamp, mintAllowedTimestamp, 6 days, multisigA))
         );
         // Set hypMinter to the proxy
         hypMinter = HypMinter(address(proxy));
@@ -166,8 +167,12 @@ contract MinterDeployTest is Test {
         assertGt(distributionDeadline, vm.getBlockTimestamp());
 
         // Expect revert when trying to distribute rewards again
-        vm.expectRevert("HypMinter: Rewards already distributed");
+        vm.expectRevert("HypMinter: Rewards must be available for distribution");
         hypMinter.distributeRewards(firstTimestamp + 90 days);
+        // Future timestamps fail too
+        vm.expectRevert("HypMinter: Rewards must be available for distribution");
+        skip(30 days);
+        hypMinter.distributeRewards(firstTimestamp + 120 days);
     }
 
     function test_mintingThroughFoundation() public {

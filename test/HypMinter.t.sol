@@ -59,6 +59,7 @@ contract HypMinterTest is Test {
         firstTimestamp = 1_752_448_487;
         // 2025-10-17 23:14:47 GMT
         uint256 mintAllowedTimestamp = 1_760_742_887;
+        uint256 distributionAllowedTimestamp = 1_761_141_600;
 
         // Read constants from implementation contract
         hypMinter = new HypMinter(7 days);
@@ -73,7 +74,7 @@ contract HypMinterTest is Test {
             address(this),
             abi.encodeCall(
                 HypMinter.initialize,
-                (accessManager, firstTimestamp, mintAllowedTimestamp, mintAllowedTimestamp, 6 days, multisigA)
+                (accessManager, firstTimestamp, distributionAllowedTimestamp - 7 days, distributionAllowedTimestamp, 7 days, multisigA)
             )
         );
         // Set hypMinter to the proxy
