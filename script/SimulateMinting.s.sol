@@ -119,8 +119,11 @@ contract SimulateMinting is Script, Test {
         vm.warp(hypMinter.mintAllowedTimestamp());
 
         // We send the already minted amount to the contract
-        vm.prank(0x79271FB18A9Bfa8b8d987bc27A063Dc6F2912F52);
-        HYPER.transfer(address(hypMinter), MINT_AMOUNT);
+        assertEq(HYPER.balanceOf(address(hypMinter)), 0);
+        vm.startPrank(0x79271FB18A9Bfa8b8d987bc27A063Dc6F2912F52);
+        HYPER.transfer(address(hypMinter), hypMinter.getStakingMintAmount());
+        HYPER.transfer(address(multisigB), hypMinter.getOperatorMintAmount());
+        vm.stopPrank();
 
         // Three mints, yielding 4 epochs worth of rewards
         uint256 initialBalance = HYPER.balanceOf(address(REWARDS));
@@ -130,6 +133,7 @@ contract SimulateMinting is Script, Test {
 
         vm.expectRevert("HypMinter: Epoch not ready");
         hypMinter.mint();
+        assertEq(HYPER.balanceOf(address(hypMinter)), hypMinter.getStakingMintAmount() * 4);
 
         vm.warp(hypMinter.distributionAllowedTimestamp());
 
@@ -140,6 +144,7 @@ contract SimulateMinting is Script, Test {
         hypMinter.distributeRewards(firstTimestamp + 90 days);
 
         assertEq(HYPER.balanceOf(address(REWARDS)) - initialBalance, hypMinter.getStakingMintAmount() * 4);
+        assertEq(HYPER.balanceOf(address(hypMinter)), 0);
 
         // Expect revert when trying to distribute rewards again
         vm.expectRevert("HypMinter: Rewards must be available for distribution");
