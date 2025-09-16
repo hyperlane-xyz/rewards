@@ -6,7 +6,8 @@ trap "kill $ANVIL_PID >/dev/null 2>&1 || true" EXIT
 # wait for anvil to be ready
 until curl -s http://localhost:8545 >/dev/null 2>&1; do sleep 0.5; done
 
-forge script script/DeployHypMinter.s.sol --rpc-url http://localhost:8545 --private-key $(hypkey mainnet3 deployer) -vvvv --broadcast
+cast rpc anvil_impersonateAccount "0xa7ECcdb9Be08178f896c26b7BbD8C3D4E844d9Ba" --rpc-url http://localhost:8545
+forge script script/DeployHypMinter.s.sol --rpc-url http://localhost:8545 --unlocked --sender 0xa7ECcdb9Be08178f896c26b7BbD8C3D4E844d9Ba  -vvvv --broadcast
 
 MULTISIG_B=0xec2EdC01a2Fbade68dBcc80947F43a5B408cC3A0
 
