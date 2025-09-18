@@ -5,11 +5,17 @@ on:
     branches:
       - main
   pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
 
 jobs:
   run-tests:
     name: Run tests
     runs-on: ubuntu-latest
+
+    env:
+      ETH_RPC_URL_MAINNET: ${{ secrets.ETH_RPC_URL_MAINNET }}
 
     steps:
       - uses: actions/checkout@v4
@@ -21,7 +27,27 @@ jobs:
         with:
           version: nightly
 
-      - name: Run Forge tests
+      # - name: Run Forge tests
+      #   run: |
+      #     forge test -vvv
+      #   id: test
+
+      - name: Run Forge Minter tests
         run: |
-          forge test -vvv
+          forge test test/HypMinter.t.sol
         id: test
+
+      - name: Run Forge Minter simulation pipeline
+        run: |
+          ./script/pipeline.sh
+        id: pipeline
+
+      - name: Upload gnosis safe calldata
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnosis-transactions
+          path: |
+            schedule_transactions.json
+            execute_network_transactions.json
+            execute_minter_transactions.json
+            execute_foundation_transactions.json

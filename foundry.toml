@@ -13,7 +13,7 @@ gas_limit = "18446744073709551615"
 verbosity = 3
 
 [rpc_endpoints]
-mainnet = "https://eth.merkle.io"
+mainnet = "${ETH_RPC_URL_MAINNET}"
 holesky = "${ETH_RPC_URL_HOLESKY}"
 
 [fmt]

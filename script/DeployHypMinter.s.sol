@@ -71,12 +71,14 @@ contract DeployHypMinter is Script {
         DeployConfig memory config
     ) internal {
         // Start broadcast
-        address deployer = _getDeployer();
-        vm.startBroadcast(deployer);
+        vm.startBroadcast();
+
+        bytes32 salt = keccak256(abi.encode(config));
 
         // Deploy implementation
         console2.log("Deploying HypMinter implementation...");
-        HypMinter implementation = new HypMinter(DISTRIBUTION_DELAY_MAXIMUM);
+        HypMinter implementation = new HypMinter{salt: salt}(DISTRIBUTION_DELAY_MAXIMUM);
+
         console2.log("Implementation deployed at:", address(implementation));
 
         // Prepare initialization data
@@ -94,7 +96,7 @@ contract DeployHypMinter is Script {
 
         // Deploy proxy with deployer as proxy admin
         console2.log("Deploying TransparentUpgradeableProxy...");
-        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy(
+        TransparentUpgradeableProxy proxy = new TransparentUpgradeableProxy{salt: salt}(
             address(implementation),
             address(config.accessManager), // Use access manager as proxy admin
             initData
@@ -126,9 +128,5 @@ contract DeployHypMinter is Script {
         );
 
         console2.log("All verifications passed!");
-    }
-
-    function _getDeployer() internal returns (address) {
-        return vm.rememberKey(vm.envUint("PRIVATE_KEY"));
     }
 }
