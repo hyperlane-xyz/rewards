@@ -22,7 +22,7 @@ contract SimulateOwnershipTransfer is Script, Test {
     address awMultisig = 0x562Dfaac27A84be6C96273F5c9594DA1681C0DA7;
 
     function setUp() public {
-        vm.createSelectFork("mainnet", 23378393 + 1);
+        vm.createSelectFork("mainnet", 23_378_393 + 1);
         proxy = ITransparentUpgradeableProxy(address(hypMinter));
     }
 
@@ -46,8 +46,8 @@ contract SimulateOwnershipTransfer is Script, Test {
     bytes accessManagerExecuteData;
 
     function schedule() public {
-         // There's three layers here. The Ownable.transferOwnership call and the AccessManager.execute() and the 
-         // AccessManagerAdmin.schedule()
+        // There's three layers here. The Ownable.transferOwnership call and the AccessManager.execute() and the
+        // AccessManagerAdmin.schedule()
         transferOwnershipData = abi.encodeCall(Ownable.transferOwnership, (awMultisig));
         accessManagerExecuteData = abi.encodeCall(accessManager.execute, (address(proxyAdmin), transferOwnershipData));
         accessManagerAdmin.schedule({
@@ -65,5 +65,4 @@ contract SimulateOwnershipTransfer is Script, Test {
         console2.log("\n=== Testing Ownership Transfer ===");
         assertEq(proxyAdmin.owner(), awMultisig);
     }
-
 }
