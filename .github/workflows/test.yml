@@ -27,11 +27,6 @@ jobs:
         with:
           version: nightly
 
-      # - name: Run Forge tests
-      #   run: |
-      #     forge test -vvv
-      #   id: test
-
       - name: Run Forge Minter tests
         run: |
           forge test test/HypMinter.t.sol
@@ -51,3 +46,15 @@ jobs:
             execute_network_transactions.json
             execute_minter_transactions.json
             execute_foundation_transactions.json
+
+      - name: Run Forge Ownership Transfer simulation pipeline
+        run: |
+          ./pipeline2.sh
+        id: pipeline
+
+      - name: Upload gnosis safe calldata
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnosis-transactions
+          path: |
+            schedule_transactions_timelock.json
