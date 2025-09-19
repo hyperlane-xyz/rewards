@@ -54,4 +54,4 @@ jobs:
         with:
           name: gnosis-transactions
           path: |
-            schedule_transactions_timelock.json
+            script/calldata/schedule_transactions_timelock.json
