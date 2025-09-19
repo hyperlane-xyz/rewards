@@ -19,7 +19,7 @@ contract SimulateOwnershipTransfer is Script, Test {
     AccessManager accessManager = AccessManager(0x3D079E977d644c914a344Dcb5Ba54dB243Cc4863);
     TimelockController accessManagerAdmin = TimelockController(payable(0xfA842f02439Af6d91d7D44525956F9E5e00e339f));
     address multisigB = 0xec2EdC01a2Fbade68dBcc80947F43a5B408cC3A0;
-    address multisigA = 0x562Dfaac27A84be6C96273F5c9594DA1681C0DA7;
+    address awMultisig = 0x562Dfaac27A84be6C96273F5c9594DA1681C0DA7;
 
     function setUp() public {
         vm.createSelectFork("mainnet", 23378393 + 1);
@@ -48,7 +48,7 @@ contract SimulateOwnershipTransfer is Script, Test {
     function schedule() public {
          // There's three layers here. The Ownable.transferOwnership call and the AccessManager.execute() and the 
          // AccessManagerAdmin.schedule()
-        transferOwnershipData = abi.encodeCall(Ownable.transferOwnership, (multisigA));
+        transferOwnershipData = abi.encodeCall(Ownable.transferOwnership, (awMultisig));
         accessManagerExecuteData = abi.encodeCall(accessManager.execute, (address(proxyAdmin), transferOwnershipData));
         accessManagerAdmin.schedule({
             target: address(accessManager),
@@ -58,12 +58,12 @@ contract SimulateOwnershipTransfer is Script, Test {
             salt: bytes32(0),
             delay: accessManagerAdmin.getMinDelay()
         });
-        console2.log("Scheduled ownership transfer to multisigA:", multisigA);
+        console2.log("Scheduled ownership transfer to awMultisig:", awMultisig);
     }
 
     function test_ownershipTransfer() public {
         console2.log("\n=== Testing Ownership Transfer ===");
-        assertEq(proxyAdmin.owner(), multisigA);
+        assertEq(proxyAdmin.owner(), awMultisig);
     }
 
 }
