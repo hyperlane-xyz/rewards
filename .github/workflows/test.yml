@@ -5,9 +5,6 @@ on:
     branches:
       - main
   pull_request:
-    branches:
-      - main
-  workflow_dispatch: {}
 
 jobs:
   run-tests:
@@ -26,11 +23,6 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
-
-      # - name: Run Forge tests
-      #   run: |
-      #     forge test -vvv
-      #   id: test
 
       - name: Run Forge Minter tests
         run: |
@@ -51,3 +43,15 @@ jobs:
             execute_network_transactions.json
             execute_minter_transactions.json
             execute_foundation_transactions.json
+
+      - name: Run Forge Ownership Transfer simulation pipeline
+        run: |
+          ./script/pipeline2.sh
+        id: pipeline2
+
+      - name: Upload gnosis safe calldata
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnosis-transactions-timelock
+          path: |
+            script/calldata/schedule_transactions_timelock.json
