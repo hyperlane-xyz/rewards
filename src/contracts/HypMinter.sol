@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {AccessManagedUpgradeable} from "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol";
+import {
+    AccessManagedUpgradeable
+} from "@openzeppelin/contracts-upgradeable/access/manager/AccessManagedUpgradeable.sol";
 import {AccessManager} from "@openzeppelin/contracts/access/manager/AccessManager.sol";
 
 import {IDefaultStakerRewards} from "../interfaces/defaultStakerRewards/IDefaultStakerRewards.sol";
@@ -100,13 +102,17 @@ contract HypMinter is AccessManagedUpgradeable {
      */
     uint256 public operatorBps;
 
-    mapping(uint rewardTimestamp => uint stakingAmount) public stakingAmounts;
+    /**
+     * @notice Mapping to store staking amounts for each reward timestamp
+     * @dev Captures the exact staking amount at mint time to handle mutable operator BPS
+     */
+    mapping(uint256 rewardTimestamp => uint256 stakingAmount) public stakingAmounts;
 
     /**
      * @notice Emitted when HYPER tokens are minted for an epoch
      * @dev Indicates successful minting of MINT_AMOUNT tokens to the contract
      */
-    event Mint(uint rewardTimestamp);
+    event Mint(uint256 rewardTimestamp);
 
     /**
      * @notice Emitted when rewards are distributed to stakers
@@ -171,12 +177,11 @@ contract HypMinter is AccessManagedUpgradeable {
         mintAllowedTimestamp = _mintAllowedTimestamp;
         distributionDelay = _distributionDelay;
         distributionAllowedTimestamp = _distributionAllowedTimestamp;
-        
+
         // Initialize operator rewards settings with default values
         operatorRewardsManager = _operatorRewardsManager;
         operatorBps = 1000;
         stakingAmounts[_firstRewardTimestamp] = getStakingMintAmount();
-
 
         // Approve maximum HYPER tokens for rewards distribution to avoid future approval calls
         HYPER.approve(address(REWARDS), type(uint256).max);
@@ -196,7 +201,7 @@ contract HypMinter is AccessManagedUpgradeable {
         // Update the last mint timestamp for next epoch calculation
         rewardDistributions[newTimestamp] = DistributionStatus.MINTED;
         lastRewardTimestamp = newTimestamp;
-        uint operatorAmount = getOperatorMintAmount();
+        uint256 operatorAmount = getOperatorMintAmount();
         // Because operator bps are mutable, take note of the staking/operator amounts at the time of minting
         stakingAmounts[newTimestamp] = MINT_AMOUNT - operatorAmount;
 
