@@ -120,7 +120,7 @@ contract HypMinterTest is Test {
 
         // Expect Mint event to be emitted
         vm.expectEmit(true, true, true, true);
-        emit HypMinter.Mint();
+        emit HypMinter.Mint(firstTimestamp + 30 days);
         hypMinter.mint();
         assertEq(
             HYPER.balanceOf(hypMinter.operatorRewardsManager()) - initialOperatorBalance,

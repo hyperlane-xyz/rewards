@@ -106,7 +106,7 @@ contract HypMinter is AccessManagedUpgradeable {
      * @notice Emitted when HYPER tokens are minted for an epoch
      * @dev Indicates successful minting of MINT_AMOUNT tokens to the contract
      */
-    event Mint();
+    event Mint(uint rewardTimestamp);
 
     /**
      * @notice Emitted when rewards are distributed to stakers
@@ -205,7 +205,7 @@ contract HypMinter is AccessManagedUpgradeable {
         // Transfer operator rewards to operator rewards manager
         HYPER.transfer(operatorRewardsManager, operatorAmount);
 
-        emit Mint();
+        emit Mint(newTimestamp);
     }
 
     /**
