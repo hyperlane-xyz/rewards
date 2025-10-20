@@ -100,6 +100,8 @@ contract HypMinter is AccessManagedUpgradeable {
      */
     uint256 public operatorBps;
 
+    mapping(uint rewardTimestamp => uint stakingAmount) public stakingAmounts;
+
     /**
      * @notice Emitted when HYPER tokens are minted for an epoch
      * @dev Indicates successful minting of MINT_AMOUNT tokens to the contract
@@ -169,10 +171,12 @@ contract HypMinter is AccessManagedUpgradeable {
         mintAllowedTimestamp = _mintAllowedTimestamp;
         distributionDelay = _distributionDelay;
         distributionAllowedTimestamp = _distributionAllowedTimestamp;
-
+        
         // Initialize operator rewards settings with default values
         operatorRewardsManager = _operatorRewardsManager;
         operatorBps = 1000;
+        stakingAmounts[_firstRewardTimestamp] = getStakingMintAmount();
+
 
         // Approve maximum HYPER tokens for rewards distribution to avoid future approval calls
         HYPER.approve(address(REWARDS), type(uint256).max);
@@ -192,11 +196,14 @@ contract HypMinter is AccessManagedUpgradeable {
         // Update the last mint timestamp for next epoch calculation
         rewardDistributions[newTimestamp] = DistributionStatus.MINTED;
         lastRewardTimestamp = newTimestamp;
+        uint operatorAmount = getOperatorMintAmount();
+        // Because operator bps are mutable, take note of the staking/operator amounts at the time of minting
+        stakingAmounts[newTimestamp] = MINT_AMOUNT - operatorAmount;
 
         // Mint the full amount to this contract
         HYPER.mint(address(this), MINT_AMOUNT);
         // Transfer operator rewards to operator rewards manager
-        HYPER.transfer(operatorRewardsManager, getOperatorMintAmount());
+        HYPER.transfer(operatorRewardsManager, operatorAmount);
 
         emit Mint();
     }
@@ -230,7 +237,7 @@ contract HypMinter is AccessManagedUpgradeable {
         REWARDS.distributeRewards({
             network: SYMBIOTIC_NETWORK,
             token: address(HYPER),
-            amount: getStakingMintAmount(),
+            amount: stakingAmounts[rewardTimestamp], // Use stored staking amount for this epoch
             data: abi.encode(rewardTimestamp, type(uint256).max, bytes(""), bytes(""))
         });
         emit Distribution(operatorBps);
